@@ -37,6 +37,9 @@
   #login input{width:100%;font-size:20px;text-align:center;margin:10px 0}
   #login button{width:100%}
   .chk{width:24px;height:24px;margin:0;flex:none}
+  .chk:disabled{opacity:.3}
+  .onleave{border-left:5px solid var(--amber);background:#FFFBEB}
+  .due{color:#C62828;font-weight:bold}
   .bulkbar{position:fixed;left:0;right:0;bottom:0;z-index:40;background:#fff;border-top:1px solid var(--line);box-shadow:0 -4px 12px rgba(0,0,0,.08);padding:10px 16px calc(10px + env(safe-area-inset-bottom))}
   .bulkbar .selrow{display:flex;align-items:center;gap:8px;font-weight:bold;max-width:720px;margin:0 auto}
   .bulkbar .btns{max-width:720px;margin:8px auto 0}
@@ -119,6 +122,9 @@
     <select id="mReason" style="width:100%;margin:6px 0"><option value="">— Reason</option><option value="SL">Sick</option><option value="PL">Personal (unpaid)</option><option value="OTHER">Other</option></select>
     <textarea id="mNote" rows="2" maxlength="300" placeholder="Note / more details" style="width:100%;font-size:15px;padding:8px;border-radius:8px;border:1px solid var(--line);font-family:inherit;margin-bottom:6px"></textarea>
   </div>
+  <div id="mDays" style="display:none;margin:8px 0"><b>How many days?</b><br>
+    <input id="mDaysIn" type="number" min="1" max="365" inputmode="numeric" placeholder="Number of days" style="width:100%;margin-top:6px">
+  </div>
   <div id="mBrk" style="display:none;margin:8px 0"><b>Sunday – lunch break taken?</b><br>
     <label style="display:block;padding:6px 0"><input type="radio" name="brk" value="Y"> Yes – 1 hour break (deduct 1 h from OT)</label>
     <label style="display:block;padding:6px 0"><input type="radio" name="brk" value="N"> No break</label>
@@ -176,10 +182,15 @@ function render(d){
     else if (w.outT) badge = '<span class="badge b-done">Checked out</span>';
     else if (w.inT) badge = '<span class="badge b-in">● Active</span>';
     const absent = w.status && w.status !== 'P';
-    const times = (w.inT ? 'In ' + esc(w.inT) : '') + (w.by ? (w.inT ? ' · ' : '') + 'by ' + esc(w.by) : '') + (w.outT ? ' · Out ' + esc(w.outT) + ' · OT ' + esc(w.ot) + 'h' : '') +
+    const lv = w.leave && !w.inT ? w.leave : null;
+    if (lv) badge = '<span class="badge b-abs">' + esc(LEAVE[lv.code] || lv.code) + '</span>';
+    const lvTxt = !lv ? '' : lv.left > 0 ? '<b>' + lv.left + ' day' + (lv.left === 1 ? '' : 's') + ' left</b> · back on duty ' + niceD(lv.ret)
+       : lv.left === 0 ? '<span class="due">Due back today (' + niceD(lv.ret) + ')</span>'
+                                        : '<span class="due">Return date passed (' + niceD(lv.ret) + ') – not back yet</span>';
+    const times = (lvTxt ? lvTxt + (w.inT || w.by ? ' · ' : '') : '') + (w.inT ? 'In ' + esc(w.inT) : '') + (w.by ? (w.inT ? ' · ' : '') + 'by ' + esc(w.by) : '') + (w.outT ? ' · Out ' + esc(w.outT) + ' · OT ' + esc(w.ot) + 'h' : '') +
                   (w.flags ? ' · <span class="flag">' + esc(w.flags) + '</span>' : '');
-    return '<div class="card"><div class="row">' +
-      '<input type="checkbox" class="chk" data-i="' + i + '" onchange="updBulk()">' +
+    return '<div class="card' + (lv ? ' onleave' : '') + '"><div class="row">' +
+      '<input type="checkbox" class="chk" data-i="' + i + '" onchange="updBulk()"' + (lv ? ' disabled title="On leave – use Check In"' : '') + '>' +
       '<div class="name">' + esc(w.name) + ' ' + badge + '</div>' +
       '<button class="in" ' + (w.inT ? 'disabled' : '') + ' onclick="act(\'checkIn\',' + i + ')">Check In</button>' +
       '<button class="out" ' + (!w.inT || w.outT ? 'disabled' : '') + ' onclick="act(\'checkOut\',' + i + ')">Check Out</button>' +
@@ -193,6 +204,8 @@ function render(d){
 
 const LEAVE = { SL: 'Sick Leave', EL: 'Emergency Leave', AV: 'Annual Vacation', WL: 'Warning Leave', PL: 'Personal Leave (unpaid)', L: 'Leave / Day off' };
 const LEAVE_UR = { SL: 'بیماری کی چھٹی', EL: 'ہنگامی چھٹی', AV: 'سالانہ چھٹی', WL: 'وارننگ چھٹی', PL: 'ذاتی چھٹی (بغیر تنخواہ)', L: 'چھٹی / آف' };
+const LONG = ['AV', 'EL', 'PL'];
+const niceD = ds => { const d = new Date(ds + 'T00:00:00Z'); return d.getUTCDate() + ' ' + ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getUTCMonth()]; };
 const LEAVE_OPTS = Object.keys(LEAVE).map(k => '<option value="' + k + '">' + LEAVE[k] + '</option>').join('');
 
 /* ---- in-page confirmation (replaces browser pop-ups) ---- */
@@ -201,6 +214,7 @@ function ask(o, onYes, onNo){
   $('mEn').innerHTML = esc(o.en).replace(/\n/g, '<br>');
   $('mForm').style.display = o.form ? '' : 'none';
   if (o.form) { $('mReason').value = ''; $('mNote').value = ''; }
+  $('mDays').style.display = o.days ? '' : 'none'; $('mDaysIn').value = '';
   $('mBrk').style.display = o.brk ? '' : 'none'; document.querySelectorAll('input[name=brk]').forEach(r => r.checked = false);
   $('mNames').textContent = o.names && o.names.length ? o.names.join(' · ') : '';
   $('mYes').textContent = o.yes || 'Yes'; $('mYes').className = o.warn ? 'out' : 'pri';
@@ -211,6 +225,11 @@ function ask(o, onYes, onNo){
       f = { reason: $('mReason').value, note: $('mNote').value.trim() };
       if (!f.reason) { toast('Select a reason', false); return; }
       if (f.reason === 'OTHER' && !f.note) { toast('Write a note for Other', false); return; }
+    }
+    if (o.days) {
+      const n = Math.floor(Number($('mDaysIn').value));
+      if (!(n >= 1 && n <= 365)) { toast('Enter the number of days', false); return; }
+      f = Object.assign(f || {}, { days: n });
     }
     if (o.brk) {
       const b = document.querySelector('input[name=brk]:checked');
@@ -244,14 +263,14 @@ function outMsg(p, names){
 function inMsg(names, lv){
   const n = names.length, who = n === 1 ? names[0] : n + ' workers', whoUr = n === 1 ? names[0] : n + ' ورکرز';
   return { names: names, title: 'Check In', yes: 'Check in',
-    en: 'Check IN ' + who + ' now?' + (lv ? '\n' + names[0] + ' is marked ' + LEAVE[lv] + '. Checking in will change this to Present.' : ''),
+    en: 'Check IN ' + who + ' now?' + (lv ? '\n' + names[0] + ' is marked ' + LEAVE[lv] + '. Checking in will change this to Present' + (LONG.indexOf(lv) >= 0 ? ' and end the leave' : '') + '.' : ''),
     ur: 'کیا ابھی ' + whoUr + ' کا چیک اِن کرنا ہے؟' + (lv ? ' یہ ' + LEAVE_UR[lv] + ' پر درج ہے، چیک اِن کرنے سے حاضری لگ جائے گی۔' : '') };
 }
 
-function selAll(cb){ document.querySelectorAll('#list .chk').forEach(c => c.checked = cb.checked); updBulk(); }
+function selAll(cb){ document.querySelectorAll('#list .chk:not(:disabled)').forEach(c => c.checked = cb.checked); updBulk(); }
 /** Bottom buttons only work when the ticked workers can all do that action. */
 function updBulk(){
-  const boxes = [...document.querySelectorAll('#list .chk')], sel = boxes.filter(c => c.checked).map(c => window._list[+c.dataset.i]);
+  const boxes = [...document.querySelectorAll('#list .chk:not(:disabled)')], sel = boxes.filter(c => c.checked).map(c => window._list[+c.dataset.i]);
   const canIn = sel.length > 0 && sel.every(w => !w.inT);
   const canOut = sel.length > 0 && sel.every(w => w.inT && !w.outT);
   $('bIn').disabled = !canIn; $('bOut').disabled = !canOut;
@@ -276,16 +295,16 @@ function act(fn, i){
   const w = window._list[i];
   const go = (loc, f) => call(fn, [PIN, w.name, false, loc].concat(f ? [f.reason || '', f.note || '', f.brk || ''] : []), d => { render(d); toast(w.name + (fn === 'checkIn' ? ' checked in' : ' checked out'), true); });
   getLoc(loc => {
-    if (fn === 'checkIn') { ask(inMsg([w.name], w.status && w.status !== 'P' ? w.status : ''), () => go(loc)); return; }
+    if (fn === 'checkIn') { ask(inMsg([w.name], w.leave ? w.leave.code : w.status && w.status !== 'P' ? w.status : ''), () => go(loc)); return; }
     call('checkOutPreview', [PIN, w.name, [w.name]], p => ask(outMsg(p, [w.name]), f => go(loc, f)));
   });
 }
 function abs(i, sel){
   const w = window._list[i], code = sel.value; if (!code) return;
-  ask({ title: 'Leave', names: [w.name], yes: 'Mark leave',
-        en: 'Mark ' + w.name + ' as ' + LEAVE[code] + '?',
-        ur: 'کیا ' + w.name + ' کو ' + LEAVE_UR[code] + ' پر درج کرنا ہے؟' },
-    () => call('markAbsent', [PIN, w.name, code], d => { render(d); toast(w.name + ' marked ' + LEAVE[code], true); }),
+  const long = LONG.indexOf(code) >= 0;
+  ask({ title: 'Leave', names: [w.name], yes: 'Mark leave', days: long,
+        en: 'Mark ' + w.name + ' as ' + LEAVE[code] + '?' + (long ? '\nHe will stay at the top of the list, marked on leave every day, until you check him in.' : '') },
+    f => call('markAbsent', [PIN, w.name, code].concat(long ? [f.days] : []), d => { render(d); toast(w.name + ' marked ' + LEAVE[code] + (long ? ' for ' + f.days + ' days' : ''), true); }),
     () => { sel.value = ''; });
 }
 

@@ -102,6 +102,7 @@
       <div class="row" style="margin-top:6px"><button class="grey" style="flex:1" onclick="aNow('aIn')">In = now</button><button class="grey" style="flex:1" onclick="aNow('aOut')">Out = now</button></div>
       <div id="aCur" class="hint"></div>
       <select id="aReason" style="width:100%"><option value="">Early check-out reason (only if under 10 h)</option><option value="SL">Sick</option><option value="PL">Personal (unpaid)</option><option value="OTHER">Other</option></select>
+      <select id="aBrk" style="width:100%;margin-top:8px"><option value="">Sunday lunch break? (Sundays only)</option><option value="Y">Break taken – deduct 1 h</option><option value="N">No break</option></select>
       <input id="aNote" placeholder="Note – why (required)" style="width:100%;margin-top:8px">
       <button class="pri" style="width:100%;margin-top:8px" onclick="aSave()">Save</button>
     </div>
@@ -117,6 +118,10 @@
   <div id="mForm" style="display:none">
     <select id="mReason" style="width:100%;margin:6px 0"><option value="">— Reason</option><option value="SL">Sick</option><option value="PL">Personal (unpaid)</option><option value="OTHER">Other</option></select>
     <textarea id="mNote" rows="2" maxlength="300" placeholder="Note / more details" style="width:100%;font-size:15px;padding:8px;border-radius:8px;border:1px solid var(--line);font-family:inherit;margin-bottom:6px"></textarea>
+  </div>
+  <div id="mBrk" style="display:none;margin:8px 0"><b>Sunday – lunch break taken?</b><br>
+    <label style="display:block;padding:6px 0"><input type="radio" name="brk" value="Y"> Yes – 1 hour break (deduct 1 h from OT)</label>
+    <label style="display:block;padding:6px 0"><input type="radio" name="brk" value="N"> No break</label>
   </div>
   <div class="btns"><button id="mNo" class="grey">Cancel</button><button id="mYes" class="pri">Yes</button></div>
 </div></div>
@@ -196,6 +201,7 @@ function ask(o, onYes, onNo){
   $('mEn').innerHTML = esc(o.en).replace(/\n/g, '<br>');
   $('mForm').style.display = o.form ? '' : 'none';
   if (o.form) { $('mReason').value = ''; $('mNote').value = ''; }
+  $('mBrk').style.display = o.brk ? '' : 'none'; document.querySelectorAll('input[name=brk]').forEach(r => r.checked = false);
   $('mNames').textContent = o.names && o.names.length ? o.names.join(' · ') : '';
   $('mYes').textContent = o.yes || 'Yes'; $('mYes').className = o.warn ? 'out' : 'pri';
   const close = () => { $('modal').style.display = 'none'; };
@@ -205,6 +211,11 @@ function ask(o, onYes, onNo){
       f = { reason: $('mReason').value, note: $('mNote').value.trim() };
       if (!f.reason) { toast('Select a reason', false); return; }
       if (f.reason === 'OTHER' && !f.note) { toast('Write a note for Other', false); return; }
+    }
+    if (o.brk) {
+      const b = document.querySelector('input[name=brk]:checked');
+      if (!b) { toast('Select if the lunch break was taken', false); return; }
+      f = Object.assign(f || {}, { brk: b.value });
     }
     close(); onYes(f);
   };
@@ -225,7 +236,7 @@ function outMsg(p, names){
   const risky = early.length > 0 || p.warn;
   en.push(risky ? 'Check out ' + who + ' anyway?' : 'Check OUT ' + who + ' now? Time is counted until ' + p.counted + '.');
   ur.push(risky ? 'کیا پھر بھی ' + whoUr + ' کا چیک آؤٹ کرنا ہے؟' : 'کیا ابھی ' + whoUr + ' کا چیک آؤٹ کرنا ہے؟ وقت ' + p.counted + ' تک شمار ہوگا۔');
-  return { names: names, warn: risky, form: early.length > 0,
+  return { names: names, warn: risky, form: early.length > 0, brk: !!p.off,
     title: early.length ? '⚠ Early check-out' : p.warn ? '⚠ Hour not complete' : 'Check Out',
     en: en.join('\n\n'), ur: ur.join(' '),
     yes: risky ? 'Check out anyway' : 'Check out' };
@@ -250,7 +261,7 @@ function updBulk(){
 function bulk(fn){
   const names = [...document.querySelectorAll('#list .chk:checked')].map(c => window._list[+c.dataset.i].name);
   if (!names.length) { toast('Tick at least one worker first', false); return; }
-  const go = (loc, f) => call(fn + 'Many', [PIN, names, loc].concat(f ? [f.reason, f.note] : []), r => {
+  const go = (loc, f) => call(fn + 'Many', [PIN, names, loc].concat(f ? [f.reason || '', f.note || '', f.brk || ''] : []), r => {
     render(r.roster);
     toast(r.ok + ' worker(s) ' + (fn === 'checkIn' ? 'checked in' : 'checked out') +
       (r.errors.length ? ' · NOT done: ' + r.errors.join(' | ') : ''), !r.errors.length);
@@ -263,7 +274,7 @@ function bulk(fn){
 
 function act(fn, i){
   const w = window._list[i];
-  const go = (loc, f) => call(fn, [PIN, w.name, false, loc].concat(f ? [f.reason, f.note] : []), d => { render(d); toast(w.name + (fn === 'checkIn' ? ' checked in' : ' checked out'), true); });
+  const go = (loc, f) => call(fn, [PIN, w.name, false, loc].concat(f ? [f.reason || '', f.note || '', f.brk || ''] : []), d => { render(d); toast(w.name + (fn === 'checkIn' ? ' checked in' : ' checked out'), true); });
   getLoc(loc => {
     if (fn === 'checkIn') { ask(inMsg([w.name], w.status && w.status !== 'P' ? w.status : ''), () => go(loc)); return; }
     call('checkOutPreview', [PIN, w.name, [w.name]], p => ask(outMsg(p, [w.name]), f => go(loc, f)));
@@ -319,9 +330,10 @@ function aSave(){
   if (!ds) { toast('Pick a date', false); return; }
   if (!tin && !tout) { toast('Enter check-in and/or check-out time', false); return; }
   if (!note) { toast('Write a note (why)', false); return; }
+  if (new Date(ds + 'T00:00:00Z').getUTCDay() === 0 && tout && !$('aBrk').value) { toast('Sunday: select if the lunch break was taken', false); return; }
   ask({ title: 'Admin – save attendance', warn: true, names: [name], yes: 'Save',
         en: name + '\nDate: ' + ds + '\nCheck in: ' + (tin || '(unchanged)') + '\nCheck out: ' + (tout || '(none)') + '\nNote: ' + note },
-    () => call('adminSet', [PIN, name, ds, tin, tout, note, $('aReason').value, note], m => { toast(m, true); $('aNote').value = ''; $('aReason').value = ''; aLoad(); }));
+    () => call('adminSet', [PIN, name, ds, tin, tout, note, $('aReason').value, note, $('aBrk').value], m => { toast(m, true); $('aNote').value = ''; $('aReason').value = ''; $('aBrk').value = ''; aLoad(); }));
 }
 function loadStaff(){ call('listStaff', [PIN], drawStaff); }
 function drawStaff(rows){

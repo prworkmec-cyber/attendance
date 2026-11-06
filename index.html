@@ -52,6 +52,8 @@
   #mNames{font-size:13px;color:var(--muted);margin:6px 0}
   .btns{display:flex;gap:8px;margin-top:12px} .btns button{flex:1}
   .grey{background:#6B7280}
+  .hint{font-size:13px;color:var(--muted);margin:4px 0 8px}
+  #adm label{font-size:13px;color:var(--muted)}
 </style>
 </head>
 <body>
@@ -86,6 +88,21 @@
         <select id="nShift"><option>DAY</option><option>NIGHT</option></select>
         <button class="pri" onclick="addW()">Add</button>
       </div>
+    </div>
+    <div class="card">
+      <b>Admin attendance – add / correct (no location check)</b>
+      <div class="hint">For outside work, missed punches or disputes. Saved as "Admin" with your note. Night shift: times after midnight (e.g. 04:00) count on the next morning.</div>
+      <select id="aWorker" style="width:100%" onchange="aLoad()"></select>
+      <label style="display:block;margin-top:8px">Date<br><input id="aDate" type="date" style="width:100%" onchange="aLoad()"></label>
+      <div class="row" style="margin-top:8px">
+        <label style="flex:1">Check in<br><input id="aIn" type="time" style="width:100%"></label>
+        <label style="flex:1">Check out<br><input id="aOut" type="time" style="width:100%"></label>
+      </div>
+      <div class="row" style="margin-top:6px"><button class="grey" style="flex:1" onclick="aNow('aIn')">In = now</button><button class="grey" style="flex:1" onclick="aNow('aOut')">Out = now</button></div>
+      <div id="aCur" class="hint"></div>
+      <select id="aReason" style="width:100%"><option value="">Early check-out reason (only if under 10 h)</option><option value="SL">Sick</option><option value="PL">Personal (unpaid)</option><option value="OTHER">Other</option></select>
+      <input id="aNote" placeholder="Note – why (required)" style="width:100%;margin-top:8px">
+      <button class="pri" style="width:100%;margin-top:8px" onclick="aSave()">Save</button>
     </div>
     <div class="card"><button class="pri" style="width:100%" onclick="setSiteHere()">📍 Set company location = my current position</button></div>
     <div class="card"><table id="staff"></table></div>
@@ -284,6 +301,27 @@ function setSiteHere(){
 }
 
 /* ---- admin ---- */
+/* ---- admin: add / correct attendance ---- */
+function dubaiNow(){ return new Date(Date.now() + OFFSET + 4 * 3600000); }
+function aNow(id){ const d = dubaiNow(), p = n => String(n).padStart(2, '0'); $(id).value = p(d.getUTCHours()) + ':' + p(d.getUTCMinutes()); }
+function aLoad(){
+  const name = $('aWorker').value, ds = $('aDate').value; $('aCur').textContent = '';
+  if (!name || !ds) return;
+  call('adminGet', [PIN, name, ds], r => {
+    $('aIn').value = r.found ? r.inT : ''; $('aOut').value = r.found ? r.outT : '';
+    $('aCur').textContent = r.found ? 'Current: in ' + (r.inT || '—') + ', out ' + (r.outT || '—') + ' · ' + r.status + ' · by ' + r.by + (r.flags ? ' · ' + r.flags : '') : 'No record for this day yet.';
+  });
+}
+function aSave(){
+  const name = $('aWorker').value, ds = $('aDate').value, tin = $('aIn').value, tout = $('aOut').value, note = $('aNote').value.trim();
+  if (!name) { toast('Select a worker', false); return; }
+  if (!ds) { toast('Pick a date', false); return; }
+  if (!tin && !tout) { toast('Enter check-in and/or check-out time', false); return; }
+  if (!note) { toast('Write a note (why)', false); return; }
+  ask({ title: 'Admin – save attendance', warn: true, names: [name], yes: 'Save',
+        en: name + '\nDate: ' + ds + '\nCheck in: ' + (tin || '(unchanged)') + '\nCheck out: ' + (tout || '(none)') + '\nNote: ' + note },
+    () => call('adminSet', [PIN, name, ds, tin, tout, note, $('aReason').value, note], m => { toast(m, true); $('aNote').value = ''; $('aReason').value = ''; aLoad(); }));
+}
 function loadStaff(){ call('listStaff', [PIN], drawStaff); }
 function drawStaff(rows){
   $('staff').innerHTML = '<tr><th>Worker</th><th>Shift</th><th>Status</th><th></th></tr>' + rows.map((r, i) =>
@@ -293,6 +331,10 @@ function drawStaff(rows){
     '<td><button class="' + (r.active ? 'out' : 'in') + '" onclick="tog(' + i + ')">' + (r.active ? 'Remove' : 'Restore') + '</button></td></tr>'
   ).join('');
   window._staff = rows;
+  const keep = $('aWorker').value;
+  $('aWorker').innerHTML = '<option value="">— Select worker —</option>' + rows.map(r => '<option value="' + esc(r.name) + '">' + esc(r.name) + ' (' + r.shift + (r.active ? '' : ', removed') + ')</option>').join('');
+  $('aWorker').value = keep;
+  if (!$('aDate').value) $('aDate').value = dubaiNow().toISOString().slice(0, 10);
 }
 function addW(){
   call('addStaff', [PIN, $('nName').value, $('nTab').value, $('nShift').value], r => { $('nName').value=''; $('nTab').value=''; drawStaff(r); toast('Worker added', true); });

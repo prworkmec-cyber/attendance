@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WORKMEC Attendance</title>
+<meta name="theme-color" content="#1F4E78">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Attendance">
+<style>
+  :root{--blue:#1F4E78;--bg:#F4F6F9;--card:#fff;--line:#E1E5EB;--green:#2E7D32;--red:#C62828;--amber:#B26A00;--muted:#6B7280}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:Arial,Helvetica,sans-serif;background:var(--bg);color:#1F2937}
+  header{background:var(--blue);color:#fff;padding:14px 16px}
+  header h1{margin:0;font-size:18px}
+  header .sub{font-size:13px;opacity:.85;margin-top:4px}
+  #clock{font-size:30px;font-weight:bold;letter-spacing:1px;margin-top:6px}
+  main{padding:12px 16px;max-width:720px;margin:0 auto}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:10px}
+  .row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .name{font-weight:bold;font-size:16px;flex:1;min-width:140px}
+  .times{font-size:13px;color:var(--muted);width:100%;margin-top:6px}
+  button,select,input{font-size:15px;padding:10px 12px;border-radius:8px;border:1px solid var(--line);font-family:inherit}
+  button{border:none;color:#fff;font-weight:bold;cursor:pointer}
+  .in{background:var(--green)} .out{background:var(--red)} .pri{background:var(--blue)}
+  button:disabled{opacity:.4;cursor:default}
+  .badge{display:inline-block;padding:3px 8px;border-radius:12px;font-size:12px;font-weight:bold;background:#E5E7EB}
+  .b-in{background:#DCFCE7;color:var(--green)} .b-done{background:#DBEAFE;color:var(--blue)} .b-abs{background:#FEF3C7;color:var(--amber)}
+  .flag{color:var(--red);font-weight:bold}
+  .warn{background:#FFF7ED;border-color:#FDBA74;color:#9A3412;font-size:14px}
+  #msg{position:fixed;left:16px;right:16px;bottom:16px;padding:12px;border-radius:8px;color:#fff;display:none;text-align:center;font-weight:bold}
+  .hidden{display:none}
+  table{width:100%;border-collapse:collapse;font-size:14px} td,th{padding:8px 4px;border-bottom:1px solid var(--line);text-align:left}
+  #login input{width:100%;font-size:20px;text-align:center;margin:10px 0}
+  #login button{width:100%}
+  .chk{width:24px;height:24px;margin:0;flex:none}
+  .bulk{position:sticky;top:0;z-index:5}
+  #msg{z-index:60}
+  select{max-width:100%}
+  #modal{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;z-index:50;padding:16px}
+  #modal .box{background:#fff;border-radius:12px;max-width:480px;width:100%;max-height:90vh;overflow:auto;padding:16px}
+  #modal h3{margin:0 0 10px;font-size:18px} #modal h3.warnh{color:var(--red)}
+  #mEn{font-size:15px;line-height:1.5}
+  .ur{direction:rtl;text-align:right;font-family:'Noto Nastaliq Urdu',serif;font-size:18px;line-height:2.1;background:#F1F5F9;border-radius:8px;padding:6px 12px;margin:10px 0}
+  #mNames{font-size:13px;color:var(--muted);margin:6px 0}
+  .btns{display:flex;gap:8px;margin-top:12px} .btns button{flex:1}
+  .grey{background:#6B7280}
+</style>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Nastaliq+Urdu&display=swap" rel="stylesheet">
+</head>
+<body>
+<header>
+  <h1>WORKMEC Attendance</h1>
+  <div class="sub" id="hdr">Enter your password</div>
+  <div id="clock">--:--:--</div>
+</header>
+<main>
+  <div id="login" class="card">
+    <input id="pin" type="password" placeholder="Password" autocomplete="off">
+    <button class="pri" onclick="doLogin()">Login</button>
+  </div>
+
+  <div id="sup" class="hidden">
+    <div id="open" class="card warn hidden"></div>
+    <div class="card row bulk">
+      <label style="display:flex;align-items:center;gap:8px;flex:1;min-width:140px;font-weight:bold"><input type="checkbox" id="all" class="chk" onchange="selAll(this)"> Select all</label>
+      <button class="in" onclick="bulk('checkIn')">Check In selected</button>
+      <button class="out" onclick="bulk('checkOut')">Check Out selected</button>
+    </div>
+    <div id="list"></div>
+    <button class="pri" style="width:100%" onclick="refresh()">Refresh</button>
+  </div>
+
+  <div id="adm" class="hidden">
+    <div class="card">
+      <b>Add worker</b>
+      <div class="row" style="margin-top:8px">
+        <input id="nName" placeholder="Name" style="flex:2;min-width:140px">
+        <input id="nTab" placeholder="Slip tab name (optional)" style="flex:2;min-width:140px">
+        <select id="nShift"><option>DAY</option><option>NIGHT</option></select>
+        <button class="pri" onclick="addW()">Add</button>
+      </div>
+    </div>
+    <div class="card"><button class="pri" style="width:100%" onclick="setSiteHere()">📍 Set company location = my current position</button></div>
+    <div class="card"><table id="staff"></table></div>
+  </div>
+</main>
+<div id="msg"></div>
+<div id="modal"><div class="box">
+  <h3 id="mTitle"></h3>
+  <div id="mEn"></div>
+  <div id="mUr" class="ur"></div>
+  <div id="mNames"></div>
+  <button id="mSpeak" class="grey" style="width:100%">🔊 اردو میں سنیں · Listen in Urdu</button>
+  <div class="btns"><button id="mNo" class="grey">Cancel · منسوخ</button><button id="mYes" class="pri">Yes</button></div>
+</div></div>
+
+<script>
+const API = 'https://script.google.com/macros/s/AKfycbyC0FR05RyxhMxK1loRqrLZWp_hDt6FXX2T3Hf7fevP0itNdxwZasc7200WkermL-PsyA/exec';   // Apps Script backend
+let PIN = '', OFFSET = 0, timer, BUSY = 0;
+const $ = id => document.getElementById(id);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+// Dubai = UTC+4 (no daylight saving). Clock follows SERVER time, not the phone.
+function tick(){
+  const d = new Date(Date.now() + OFFSET + 4 * 3600000), p = n => String(n).padStart(2, '0');
+  $('clock').textContent = p(d.getUTCHours()) + ':' + p(d.getUTCMinutes()) + ':' + p(d.getUTCSeconds());
+}
+setInterval(tick, 1000); tick();
+call('serverNow', [], t => { OFFSET = t - Date.now(); tick(); });
+
+function toast(t, ok){ const m=$('msg'); m.textContent=t; m.style.background= ok? '#2E7D32':'#C62828'; m.style.display='block'; clearTimeout(timer); timer=setTimeout(()=>m.style.display='none', ok ? 3500 : 8000); }
+function call(fn, args, done){
+  BUSY++; document.body.style.cursor = 'progress';
+  fetch(API, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ fn: fn, args: args }) })
+    .then(r => r.json())
+    .then(r => { if (r.ok) done(r.data); else toast(r.error, false); })
+    .catch(() => toast('No internet / server not reachable · انٹرنیٹ چیک کریں', false))
+    .finally(() => { if (--BUSY <= 0) { BUSY = 0; document.body.style.cursor = ''; } });
+}
+
+function doLogin(){
+  PIN = $('pin').value.trim();
+  call('login', [PIN], r => {
+    $('login').classList.add('hidden');
+    if (r.role === 'ADMIN') { $('adm').classList.remove('hidden'); $('hdr').textContent = 'Admin – staff management'; loadStaff(); }
+    else { $('sup').classList.remove('hidden'); refresh(); getLoc(() => {}, true); }   // ask location permission early
+  });
+}
+$('pin').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+
+function refresh(){ call('getRoster', [PIN], render); }
+
+function render(d){
+  OFFSET = d.now - Date.now(); tick(); EXEC_URL = d.url || EXEC_URL;
+  $('hdr').textContent = d.shift + ' SHIFT · ' + d.day + ' ' + d.date + ' · ' + d.name;
+  const o = $('open');
+  if (d.open.length){ o.innerHTML = '<b>No check-out recorded:</b> ' + d.open.map(esc).join(', ') + '<br>Admin must correct these in Daily Log.'; o.classList.remove('hidden'); }
+  else o.classList.add('hidden');
+  $('list').innerHTML = d.list.map((w, i) => {
+    let badge = '<span class="badge">Not marked</span>';
+    if (w.status && w.status !== 'P') badge = '<span class="badge b-abs">' + esc(LEAVE[w.status] || w.status) + '</span>';
+    else if (w.outT) badge = '<span class="badge b-done">Checked out</span>';
+    else if (w.inT) badge = '<span class="badge b-in">● Active</span>';
+    const absent = w.status && w.status !== 'P';
+    const times = (w.inT ? 'In ' + esc(w.inT) : '') + (w.by ? (w.inT ? ' · ' : '') + 'by ' + esc(w.by) : '') + (w.outT ? ' · Out ' + esc(w.outT) + ' · OT ' + esc(w.ot) + 'h' : '') +
+                  (w.flags ? ' · <span class="flag">' + esc(w.flags) + '</span>' : '');
+    return '<div class="card"><div class="row">' +
+      '<input type="checkbox" class="chk" data-i="' + i + '">' +
+      '<div class="name">' + esc(w.name) + ' ' + badge + '</div>' +
+      '<button class="in" ' + (w.inT ? 'disabled' : '') + ' onclick="act(\'checkIn\',' + i + ')">Check In</button>' +
+      '<button class="out" ' + (!w.inT || w.outT ? 'disabled' : '') + ' onclick="act(\'checkOut\',' + i + ')">Check Out</button>' +
+      '<select ' + (w.inT ? 'disabled' : '') + ' onchange="abs(' + i + ',this)">' +
+        '<option value="">' + (w.outT ? 'Checked out' : w.inT ? 'Active' : absent ? esc(LEAVE[w.status] || w.status) : '— Not marked —') + '</option>' + LEAVE_OPTS +
+      '</select></div>' + (times ? '<div class="times">' + times + '</div>' : '') + '</div>';
+  }).join('');
+  window._list = d.list;
+  $('all').checked = false;
+}
+
+const LEAVE = { SL: 'Sick Leave', EL: 'Emergency Leave', AV: 'Annual Vacation', WL: 'Warning Leave', PL: 'Personal Leave (unpaid)', L: 'Leave / Day off' };
+const LEAVE_UR = { SL: 'بیماری کی چھٹی', EL: 'ہنگامی چھٹی', AV: 'سالانہ چھٹی', WL: 'وارننگ چھٹی', PL: 'ذاتی چھٹی (بغیر تنخواہ)', L: 'چھٹی / آف' };
+const LEAVE_OPTS = Object.keys(LEAVE).map(k => '<option value="' + k + '">' + LEAVE[k] + ' · ' + LEAVE_UR[k] + '</option>').join('');
+
+/* ---- in-page confirmation (replaces browser pop-ups) ---- */
+function ask(o, onYes, onNo){
+  $('mTitle').textContent = o.title; $('mTitle').className = o.warn ? 'warnh' : '';
+  $('mEn').innerHTML = esc(o.en).replace(/\n/g, '<br>');
+  $('mUr').textContent = o.ur || ''; $('mUr').style.display = o.ur ? '' : 'none';
+  $('mSpeak').style.display = o.ur ? '' : 'none';
+  $('mNames').textContent = o.names && o.names.length ? o.names.join(' · ') : '';
+  $('mYes').textContent = o.yes || 'Yes · ہاں'; $('mYes').className = o.warn ? 'out' : 'pri';
+  const close = () => { $('modal').style.display = 'none'; try { speechSynthesis.cancel(); } catch (e) {} };
+  $('mYes').onclick = () => { close(); onYes(); };
+  $('mNo').onclick = () => { close(); if (onNo) onNo(); };
+  $('mSpeak').onclick = () => speakUr(o.ur);
+  $('modal').style.display = 'flex';
+}
+function speakUr(t){
+  try {
+    const v = speechSynthesis.getVoices().find(x => /^ur/i.test(x.lang));
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(t); u.lang = v ? v.lang : 'ur-PK'; if (v) u.voice = v; u.rate = 0.9;
+    speechSynthesis.speak(u);
+    if (!v) toast('No Urdu voice found on this phone. Install it: Settings › Google Text-to-speech › Urdu', false);
+  } catch (e) { toast('Voice not supported on this phone', false); }
+}
+try { speechSynthesis.getVoices(); speechSynthesis.onvoiceschanged = () => speechSynthesis.getVoices(); } catch (e) {}
+
+function outMsg(p, names){
+  const n = names.length, who = n === 1 ? names[0] : n + ' workers', whoUr = n === 1 ? names[0] : n + ' ورکرز';
+  if (p.warn) return { warn: true, names: names, title: '⚠ Hour not complete · گھنٹہ مکمل نہیں ہوا',
+    en: 'It is ' + p.mins + ' min into the hour. Only time until ' + p.counted + ' will be counted.\nComplete the hour: ' + p.left + ' min left (until ' + p.nextHour + ').\nCheck out ' + who + ' anyway?',
+    ur: 'اس گھنٹے کے ' + p.mins + ' منٹ گزرے ہیں۔ صرف ' + p.counted + ' تک کا وقت شمار ہوگا۔ گھنٹہ مکمل کرنے کے لیے ' + p.left + ' منٹ باقی ہیں، یعنی ' + p.nextHour + ' تک۔ کیا پھر بھی ' + whoUr + ' کا چیک آؤٹ کرنا ہے؟',
+    yes: 'Check out anyway · پھر بھی چیک آؤٹ' };
+  return { names: names, title: 'Check Out · چیک آؤٹ',
+    en: 'Check OUT ' + who + ' now? Time is counted until ' + p.counted + '.',
+    ur: 'کیا ابھی ' + whoUr + ' کا چیک آؤٹ کرنا ہے؟ وقت ' + p.counted + ' تک شمار ہوگا۔',
+    yes: 'Check out · چیک آؤٹ' };
+}
+function inMsg(names, lv){
+  const n = names.length, who = n === 1 ? names[0] : n + ' workers', whoUr = n === 1 ? names[0] : n + ' ورکرز';
+  return { names: names, title: 'Check In · چیک اِن', yes: 'Check in · چیک اِن',
+    en: 'Check IN ' + who + ' now?' + (lv ? '\n' + names[0] + ' is marked ' + LEAVE[lv] + '. Checking in will change this to Present.' : ''),
+    ur: 'کیا ابھی ' + whoUr + ' کا چیک اِن کرنا ہے؟' + (lv ? ' یہ ' + LEAVE_UR[lv] + ' پر درج ہے، چیک اِن کرنے سے حاضری لگ جائے گی۔' : '') };
+}
+
+function selAll(cb){ document.querySelectorAll('#list .chk').forEach(c => c.checked = cb.checked); }
+function bulk(fn){
+  const names = [...document.querySelectorAll('#list .chk:checked')].map(c => window._list[+c.dataset.i].name);
+  if (!names.length) { toast('Tick at least one worker first · پہلے ورکر منتخب کریں', false); return; }
+  const go = loc => call(fn + 'Many', [PIN, names, loc], r => {
+    render(r.roster);
+    toast(r.ok + ' worker(s) ' + (fn === 'checkIn' ? 'checked in' : 'checked out') +
+      (r.errors.length ? ' · NOT done: ' + r.errors.join(' | ') : ''), !r.errors.length);
+  });
+  getLoc(loc => {
+    if (fn === 'checkIn') { ask(inMsg(names, ''), () => go(loc)); return; }
+    call('checkOutPreview', [PIN, names[0]], p => ask(outMsg(p, names), () => go(loc)));
+  });
+}
+
+function act(fn, i){
+  const w = window._list[i];
+  const go = loc => call(fn, [PIN, w.name, false, loc], d => { render(d); toast(w.name + (fn === 'checkIn' ? ' checked in' : ' checked out'), true); });
+  getLoc(loc => {
+    if (fn === 'checkIn') { ask(inMsg([w.name], w.status && w.status !== 'P' ? w.status : ''), () => go(loc)); return; }
+    call('checkOutPreview', [PIN, w.name], p => ask(outMsg(p, [w.name]), () => go(loc)));
+  });
+}
+function abs(i, sel){
+  const w = window._list[i], code = sel.value; if (!code) return;
+  ask({ title: 'Leave · چھٹی', names: [w.name], yes: 'Mark leave · چھٹی درج کریں',
+        en: 'Mark ' + w.name + ' as ' + LEAVE[code] + '?',
+        ur: 'کیا ' + w.name + ' کو ' + LEAVE_UR[code] + ' پر درج کرنا ہے؟' },
+    () => call('markAbsent', [PIN, w.name, code], d => { render(d); toast(w.name + ' marked ' + LEAVE[code], true); }),
+    () => { sel.value = ''; });
+}
+
+/* ---- location (punch only inside WORKMEC FZE) ---- */
+let EXEC_URL = '';
+function getLoc(ok, silent){
+  if (!navigator.geolocation) { if (!silent) locFail({ code: 0 }); return; }
+  if (!silent) toast('Getting location… · لوکیشن لی جا رہی ہے', true);
+  navigator.geolocation.getCurrentPosition(
+    p => ok({ lat: p.coords.latitude, lng: p.coords.longitude, acc: Math.round(p.coords.accuracy) }),
+    e => { if (!silent) locFail(e); },
+    { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 });
+}
+function locFail(e){
+  ask({ title: '📍 Location required · لوکیشن ضروری ہے', warn: true,
+    en: 'Attendance can only be marked with location ON, inside WORKMEC FZE.\n1. Turn ON location (GPS) on the phone.\n2. Allow location for this app (browser settings › Site settings › Location).\n3. Try again.' +
+        (e && e.code === 3 ? '\nGPS took too long – move near a window or outside and try again.' : ''),
+    ur: 'حاضری صرف لوکیشن آن ہونے پر اور ورک میک کمپنی کے اندر لگے گی۔ فون کی لوکیشن (جی پی ایس) آن کریں، اس ایپ کو لوکیشن کی اجازت دیں اور دوبارہ کوشش کریں۔',
+    yes: 'OK · ٹھیک ہے' },
+    () => {});
+}
+function setSiteHere(){
+  getLoc(loc => ask({ title: 'Set company location', en: 'Save your current position as the WORKMEC FZE location? GPS accuracy ±' + loc.acc + ' m.\nOnly do this while standing inside the factory.' },
+    () => call('setSite', [PIN, loc], m => toast(m, true))));
+}
+
+/* ---- admin ---- */
+function loadStaff(){ call('listStaff', [PIN], drawStaff); }
+function drawStaff(rows){
+  $('staff').innerHTML = '<tr><th>Worker</th><th>Shift</th><th>Status</th><th></th></tr>' + rows.map((r, i) =>
+    '<tr><td>' + esc(r.name) + (r.tabOk ? '' : '<br><span class="flag">No slip tab "' + esc(r.tab) + '"</span>') + '</td>' +
+    '<td><select onchange="chShift(' + i + ',this)"><option' + (r.shift==='DAY'?' selected':'') + '>DAY</option><option' + (r.shift==='NIGHT'?' selected':'') + '>NIGHT</option></select></td>' +
+    '<td>' + (r.active ? 'Active' : '<span class="flag">Removed</span>') + '</td>' +
+    '<td><button class="' + (r.active ? 'out' : 'in') + '" onclick="tog(' + i + ')">' + (r.active ? 'Remove' : 'Restore') + '</button></td></tr>'
+  ).join('');
+  window._staff = rows;
+}
+function addW(){
+  call('addStaff', [PIN, $('nName').value, $('nTab').value, $('nShift').value], r => { $('nName').value=''; $('nTab').value=''; drawStaff(r); toast('Worker added', true); });
+}
+function tog(i){
+  const r = window._staff[i];
+  ask({ title: r.active ? 'Remove worker' : 'Restore worker', en: (r.active ? 'Remove ' : 'Restore ') + r.name + '?', warn: r.active },
+    () => call('setActive', [PIN, r.name, !r.active], drawStaff));
+}
+function chShift(i, sel){
+  const r = window._staff[i], to = sel.value;
+  ask({ title: 'Change shift', en: 'Move ' + r.name + ' to ' + to + ' shift from today?' },
+    () => call('changeShift', [PIN, r.name, to], x => { drawStaff(x); toast('Shift changed', true); }),
+    () => { sel.value = r.shift; });
+}
+</script>
+<script>
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+</script>
+</body>
+</html>

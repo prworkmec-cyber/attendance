@@ -178,7 +178,7 @@ function render(d){
       '<button class="in" ' + (w.inT ? 'disabled' : '') + ' onclick="act(\'checkIn\',' + i + ')">Check In</button>' +
       '<button class="out" ' + (!w.inT || w.outT ? 'disabled' : '') + ' onclick="act(\'checkOut\',' + i + ')">Check Out</button>' +
       '<select ' + (w.inT ? 'disabled' : '') + ' onchange="abs(' + i + ',this)">' +
-        '<option value="">' + (w.outT ? 'Checked out' : w.inT ? 'Active' : absent ? esc(LEAVE[w.status] || w.status) : '— Not marked —') + '</option>' + LEAVE_OPTS +
+        '<option value="">' + (w.outT ? 'Checked out' : w.inT ? 'Active' : absent ? esc(LEAVE[w.status] || w.status) : 'Present') + '</option>' + LEAVE_OPTS +
       '</select></div>' + (times ? '<div class="times">' + times + '</div>' : '') + '</div>';
   }).join('');
   window._list = d.list;

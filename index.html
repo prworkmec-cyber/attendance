@@ -26,7 +26,7 @@
   button,select,input{font-size:15px;padding:10px 12px;border-radius:8px;border:1px solid var(--line);font-family:inherit}
   button{border:none;color:#fff;font-weight:bold;cursor:pointer}
   .in{background:var(--green)} .out{background:var(--red)} .pri{background:var(--blue)}
-  button:disabled{opacity:.4;cursor:default}
+  button:disabled{opacity:.25;cursor:not-allowed;filter:grayscale(1)}
   .badge{display:inline-block;padding:3px 8px;border-radius:12px;font-size:12px;font-weight:bold;background:#E5E7EB}
   .b-in{background:#DCFCE7;color:var(--green)} .b-done{background:#DBEAFE;color:var(--blue)} .b-abs{background:#FEF3C7;color:var(--amber)}
   .flag{color:var(--red);font-weight:bold}
@@ -37,8 +37,12 @@
   #login input{width:100%;font-size:20px;text-align:center;margin:10px 0}
   #login button{width:100%}
   .chk{width:24px;height:24px;margin:0;flex:none}
-  .bulk{position:sticky;top:0;z-index:5}
-  #msg{z-index:60}
+  .bulkbar{position:fixed;left:0;right:0;bottom:0;z-index:40;background:#fff;border-top:1px solid var(--line);box-shadow:0 -4px 12px rgba(0,0,0,.08);padding:10px 16px calc(10px + env(safe-area-inset-bottom))}
+  .bulkbar .selrow{display:flex;align-items:center;gap:8px;font-weight:bold;max-width:720px;margin:0 auto}
+  .bulkbar .btns{max-width:720px;margin:8px auto 0}
+  #selInfo{font-weight:normal;color:var(--muted);font-size:13px}
+  #sup{padding-bottom:140px}
+  #msg{z-index:60;bottom:130px}
   select{max-width:100%}
   #modal{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;z-index:50;padding:16px}
   #modal .box{background:#fff;border-radius:12px;max-width:480px;width:100%;max-height:90vh;overflow:auto;padding:16px}
@@ -65,13 +69,12 @@
 
   <div id="sup" class="hidden">
     <div id="open" class="card warn hidden"></div>
-    <div class="card row bulk">
-      <label style="display:flex;align-items:center;gap:8px;flex:1;min-width:140px;font-weight:bold"><input type="checkbox" id="all" class="chk" onchange="selAll(this)"> Select all</label>
-      <button class="in" onclick="bulk('checkIn')">Check In selected</button>
-      <button class="out" onclick="bulk('checkOut')">Check Out selected</button>
-    </div>
     <div id="list"></div>
     <button class="pri" style="width:100%" onclick="refresh()">Refresh</button>
+    <div class="bulkbar">
+      <label class="selrow"><input type="checkbox" id="all" class="chk" onchange="selAll(this)"> Select all <span id="selInfo"></span></label>
+      <div class="btns"><button id="bIn" class="in" disabled onclick="bulk('checkIn')">Check In selected</button><button id="bOut" class="out" disabled onclick="bulk('checkOut')">Check Out selected</button></div>
+    </div>
   </div>
 
   <div id="adm" class="hidden">
@@ -153,7 +156,7 @@ function render(d){
     const times = (w.inT ? 'In ' + esc(w.inT) : '') + (w.by ? (w.inT ? ' · ' : '') + 'by ' + esc(w.by) : '') + (w.outT ? ' · Out ' + esc(w.outT) + ' · OT ' + esc(w.ot) + 'h' : '') +
                   (w.flags ? ' · <span class="flag">' + esc(w.flags) + '</span>' : '');
     return '<div class="card"><div class="row">' +
-      '<input type="checkbox" class="chk" data-i="' + i + '">' +
+      '<input type="checkbox" class="chk" data-i="' + i + '" onchange="updBulk()">' +
       '<div class="name">' + esc(w.name) + ' ' + badge + '</div>' +
       '<button class="in" ' + (w.inT ? 'disabled' : '') + ' onclick="act(\'checkIn\',' + i + ')">Check In</button>' +
       '<button class="out" ' + (!w.inT || w.outT ? 'disabled' : '') + ' onclick="act(\'checkOut\',' + i + ')">Check Out</button>' +
@@ -162,7 +165,7 @@ function render(d){
       '</select></div>' + (times ? '<div class="times">' + times + '</div>' : '') + '</div>';
   }).join('');
   window._list = d.list;
-  $('all').checked = false;
+  $('all').checked = false; updBulk();
 }
 
 const LEAVE = { SL: 'Sick Leave', EL: 'Emergency Leave', AV: 'Annual Vacation', WL: 'Warning Leave', PL: 'Personal Leave (unpaid)', L: 'Leave / Day off' };
@@ -216,7 +219,16 @@ function inMsg(names, lv){
     ur: 'کیا ابھی ' + whoUr + ' کا چیک اِن کرنا ہے؟' + (lv ? ' یہ ' + LEAVE_UR[lv] + ' پر درج ہے، چیک اِن کرنے سے حاضری لگ جائے گی۔' : '') };
 }
 
-function selAll(cb){ document.querySelectorAll('#list .chk').forEach(c => c.checked = cb.checked); }
+function selAll(cb){ document.querySelectorAll('#list .chk').forEach(c => c.checked = cb.checked); updBulk(); }
+/** Bottom buttons only work when the ticked workers can all do that action. */
+function updBulk(){
+  const boxes = [...document.querySelectorAll('#list .chk')], sel = boxes.filter(c => c.checked).map(c => window._list[+c.dataset.i]);
+  const canIn = sel.length > 0 && sel.every(w => !w.inT);
+  const canOut = sel.length > 0 && sel.every(w => w.inT && !w.outT);
+  $('bIn').disabled = !canIn; $('bOut').disabled = !canOut;
+  $('all').checked = sel.length > 0 && sel.length === boxes.length;
+  $('selInfo').textContent = !sel.length ? '' : (canIn || canOut) ? '(' + sel.length + ' selected)' : '(' + sel.length + ' selected – mixed: untick Active or Not-marked workers)';
+}
 function bulk(fn){
   const names = [...document.querySelectorAll('#list .chk:checked')].map(c => window._list[+c.dataset.i].name);
   if (!names.length) { toast('Tick at least one worker first', false); return; }

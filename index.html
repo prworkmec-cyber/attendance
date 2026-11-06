@@ -94,6 +94,10 @@
   <div id="mEn"></div>
   <div id="mUr" class="ur"></div>
   <div id="mNames"></div>
+  <div id="mForm" style="display:none">
+    <select id="mReason" style="width:100%;margin:6px 0"><option value="">— Reason · وجہ —</option><option value="SL">Sick · بیماری</option><option value="PL">Personal (unpaid) · ذاتی (بغیر تنخواہ)</option><option value="OTHER">Other · دیگر</option></select>
+    <textarea id="mNote" rows="2" maxlength="300" placeholder="Note / more details · تفصیل" style="width:100%;font-size:15px;padding:8px;border-radius:8px;border:1px solid var(--line);font-family:inherit;margin-bottom:6px"></textarea>
+  </div>
   <button id="mSpeak" class="grey" style="width:100%">🔊 اردو میں سنیں · Listen in Urdu</button>
   <div class="btns"><button id="mNo" class="grey">Cancel · منسوخ</button><button id="mYes" class="pri">Yes</button></div>
 </div></div>
@@ -171,10 +175,20 @@ function ask(o, onYes, onNo){
   $('mEn').innerHTML = esc(o.en).replace(/\n/g, '<br>');
   $('mUr').textContent = o.ur || ''; $('mUr').style.display = o.ur ? '' : 'none';
   $('mSpeak').style.display = o.ur ? '' : 'none';
+  $('mForm').style.display = o.form ? '' : 'none';
+  if (o.form) { $('mReason').value = ''; $('mNote').value = ''; }
   $('mNames').textContent = o.names && o.names.length ? o.names.join(' · ') : '';
   $('mYes').textContent = o.yes || 'Yes · ہاں'; $('mYes').className = o.warn ? 'out' : 'pri';
   const close = () => { $('modal').style.display = 'none'; try { speechSynthesis.cancel(); } catch (e) {} };
-  $('mYes').onclick = () => { close(); onYes(); };
+  $('mYes').onclick = () => {
+    let f = null;
+    if (o.form) {
+      f = { reason: $('mReason').value, note: $('mNote').value.trim() };
+      if (!f.reason) { toast('Select a reason · وجہ منتخب کریں', false); return; }
+      if (f.reason === 'OTHER' && !f.note) { toast('Write a note for Other · نوٹ لکھیں', false); return; }
+    }
+    close(); onYes(f);
+  };
   $('mNo').onclick = () => { close(); if (onNo) onNo(); };
   $('mSpeak').onclick = () => speakUr(o.ur);
   $('modal').style.display = 'flex';
@@ -192,14 +206,22 @@ try { speechSynthesis.getVoices(); speechSynthesis.onvoiceschanged = () => speec
 
 function outMsg(p, names){
   const n = names.length, who = n === 1 ? names[0] : n + ' workers', whoUr = n === 1 ? names[0] : n + ' ورکرز';
-  if (p.warn) return { warn: true, names: names, title: '⚠ Hour not complete · گھنٹہ مکمل نہیں ہوا',
-    en: 'It is ' + p.mins + ' min into the hour. Only time until ' + p.counted + ' will be counted.\nComplete the hour: ' + p.left + ' min left (until ' + p.nextHour + ').\nCheck out ' + who + ' anyway?',
-    ur: 'اس گھنٹے کے ' + p.mins + ' منٹ گزرے ہیں۔ صرف ' + p.counted + ' تک کا وقت شمار ہوگا۔ گھنٹہ مکمل کرنے کے لیے ' + p.left + ' منٹ باقی ہیں، یعنی ' + p.nextHour + ' تک۔ کیا پھر بھی ' + whoUr + ' کا چیک آؤٹ کرنا ہے؟',
-    yes: 'Check out anyway · پھر بھی چیک آؤٹ' };
-  return { names: names, title: 'Check Out · چیک آؤٹ',
-    en: 'Check OUT ' + who + ' now? Time is counted until ' + p.counted + '.',
-    ur: 'کیا ابھی ' + whoUr + ' کا چیک آؤٹ کرنا ہے؟ وقت ' + p.counted + ' تک شمار ہوگا۔',
-    yes: 'Check out · چیک آؤٹ' };
+  const early = p.early || [], en = [], ur = [];
+  if (early.length) {
+    en.push('Less than ' + p.normal + ' hours worked:\n' + early.map(e => '• ' + e.name + ' – ' + e.worked + ' h worked (' + e.short + ' h short)').join('\n') + '\nSelect a reason below.');
+    ur.push(p.normal + ' گھنٹے مکمل نہیں ہوئے: ' + early.map(e => e.name + ' نے ' + e.worked + ' گھنٹے کام کیا (' + e.short + ' گھنٹے کم)').join('، ') + '۔ نیچے وجہ منتخب کریں۔');
+  }
+  if (p.warn) {
+    en.push('It is ' + p.mins + ' min into the hour. Only time until ' + p.counted + ' will be counted. Complete the hour: ' + p.left + ' min left (until ' + p.nextHour + ').');
+    ur.push('اس گھنٹے کے ' + p.mins + ' منٹ گزرے ہیں۔ صرف ' + p.counted + ' تک کا وقت شمار ہوگا۔ گھنٹہ مکمل کرنے کے لیے ' + p.left + ' منٹ باقی ہیں، یعنی ' + p.nextHour + ' تک۔');
+  }
+  const risky = early.length > 0 || p.warn;
+  en.push(risky ? 'Check out ' + who + ' anyway?' : 'Check OUT ' + who + ' now? Time is counted until ' + p.counted + '.');
+  ur.push(risky ? 'کیا پھر بھی ' + whoUr + ' کا چیک آؤٹ کرنا ہے؟' : 'کیا ابھی ' + whoUr + ' کا چیک آؤٹ کرنا ہے؟ وقت ' + p.counted + ' تک شمار ہوگا۔');
+  return { names: names, warn: risky, form: early.length > 0,
+    title: early.length ? '⚠ Early check-out · جلدی چیک آؤٹ' : p.warn ? '⚠ Hour not complete · گھنٹہ مکمل نہیں ہوا' : 'Check Out · چیک آؤٹ',
+    en: en.join('\n\n'), ur: ur.join(' '),
+    yes: risky ? 'Check out anyway · پھر بھی چیک آؤٹ' : 'Check out · چیک آؤٹ' };
 }
 function inMsg(names, lv){
   const n = names.length, who = n === 1 ? names[0] : n + ' workers', whoUr = n === 1 ? names[0] : n + ' ورکرز';
@@ -212,23 +234,23 @@ function selAll(cb){ document.querySelectorAll('#list .chk').forEach(c => c.chec
 function bulk(fn){
   const names = [...document.querySelectorAll('#list .chk:checked')].map(c => window._list[+c.dataset.i].name);
   if (!names.length) { toast('Tick at least one worker first · پہلے ورکر منتخب کریں', false); return; }
-  const go = loc => call(fn + 'Many', [PIN, names, loc], r => {
+  const go = (loc, f) => call(fn + 'Many', [PIN, names, loc].concat(f ? [f.reason, f.note] : []), r => {
     render(r.roster);
     toast(r.ok + ' worker(s) ' + (fn === 'checkIn' ? 'checked in' : 'checked out') +
       (r.errors.length ? ' · NOT done: ' + r.errors.join(' | ') : ''), !r.errors.length);
   });
   getLoc(loc => {
     if (fn === 'checkIn') { ask(inMsg(names, ''), () => go(loc)); return; }
-    call('checkOutPreview', [PIN, names[0]], p => ask(outMsg(p, names), () => go(loc)));
+    call('checkOutPreview', [PIN, names[0], names], p => ask(outMsg(p, names), f => go(loc, f)));
   });
 }
 
 function act(fn, i){
   const w = window._list[i];
-  const go = loc => call(fn, [PIN, w.name, false, loc], d => { render(d); toast(w.name + (fn === 'checkIn' ? ' checked in' : ' checked out'), true); });
+  const go = (loc, f) => call(fn, [PIN, w.name, false, loc].concat(f ? [f.reason, f.note] : []), d => { render(d); toast(w.name + (fn === 'checkIn' ? ' checked in' : ' checked out'), true); });
   getLoc(loc => {
     if (fn === 'checkIn') { ask(inMsg([w.name], w.status && w.status !== 'P' ? w.status : ''), () => go(loc)); return; }
-    call('checkOutPreview', [PIN, w.name], p => ask(outMsg(p, [w.name]), () => go(loc)));
+    call('checkOutPreview', [PIN, w.name, [w.name]], p => ask(outMsg(p, [w.name]), f => go(loc, f)));
   });
 }
 function abs(i, sel){

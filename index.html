@@ -49,13 +49,13 @@
   .btns{display:flex;gap:8px;margin-top:12px} .btns button{flex:1}
   .grey{background:#6B7280}
 </style>
-<link href="https://fonts.googleapis.com/css2?family=Noto+Nastaliq+Urdu&display=swap" rel="stylesheet">
 </head>
 <body>
 <header>
   <h1>WORKMEC Attendance</h1>
   <div class="sub" id="hdr">Enter your password</div>
   <div id="clock">--:--:--</div>
+  <div id="today" class="sub" style="font-size:15px;opacity:1"></div>
 </header>
 <main>
   <div id="login" class="card">
@@ -92,14 +92,12 @@
 <div id="modal"><div class="box">
   <h3 id="mTitle"></h3>
   <div id="mEn"></div>
-  <div id="mUr" class="ur"></div>
   <div id="mNames"></div>
   <div id="mForm" style="display:none">
-    <select id="mReason" style="width:100%;margin:6px 0"><option value="">— Reason · وجہ —</option><option value="SL">Sick · بیماری</option><option value="PL">Personal (unpaid) · ذاتی (بغیر تنخواہ)</option><option value="OTHER">Other · دیگر</option></select>
-    <textarea id="mNote" rows="2" maxlength="300" placeholder="Note / more details · تفصیل" style="width:100%;font-size:15px;padding:8px;border-radius:8px;border:1px solid var(--line);font-family:inherit;margin-bottom:6px"></textarea>
+    <select id="mReason" style="width:100%;margin:6px 0"><option value="">— Reason</option><option value="SL">Sick</option><option value="PL">Personal (unpaid)</option><option value="OTHER">Other</option></select>
+    <textarea id="mNote" rows="2" maxlength="300" placeholder="Note / more details" style="width:100%;font-size:15px;padding:8px;border-radius:8px;border:1px solid var(--line);font-family:inherit;margin-bottom:6px"></textarea>
   </div>
-  <button id="mSpeak" class="grey" style="width:100%">🔊 اردو میں سنیں · Listen in Urdu</button>
-  <div class="btns"><button id="mNo" class="grey">Cancel · منسوخ</button><button id="mYes" class="pri">Yes</button></div>
+  <div class="btns"><button id="mNo" class="grey">Cancel</button><button id="mYes" class="pri">Yes</button></div>
 </div></div>
 
 <script>
@@ -112,6 +110,8 @@ const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp
 function tick(){
   const d = new Date(Date.now() + OFFSET + 4 * 3600000), p = n => String(n).padStart(2, '0');
   $('clock').textContent = p(d.getUTCHours()) + ':' + p(d.getUTCMinutes()) + ':' + p(d.getUTCSeconds());
+  $('today').textContent = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][d.getUTCDay()] + ', ' + d.getUTCDate() + ' ' +
+    ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getUTCMonth()] + ' ' + d.getUTCFullYear();
 }
 setInterval(tick, 1000); tick();
 call('serverNow', [], t => { OFFSET = t - Date.now(); tick(); });
@@ -122,7 +122,7 @@ function call(fn, args, done){
   fetch(API, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ fn: fn, args: args }) })
     .then(r => r.json())
     .then(r => { if (r.ok) done(r.data); else toast(r.error, false); })
-    .catch(() => toast('No internet / server not reachable · انٹرنیٹ چیک کریں', false))
+    .catch(() => toast('No internet / server not reachable', false))
     .finally(() => { if (--BUSY <= 0) { BUSY = 0; document.body.style.cursor = ''; } });
 }
 
@@ -140,7 +140,7 @@ function refresh(){ call('getRoster', [PIN], render); }
 
 function render(d){
   OFFSET = d.now - Date.now(); tick(); EXEC_URL = d.url || EXEC_URL;
-  $('hdr').textContent = d.shift + ' SHIFT · ' + d.day + ' ' + d.date + ' · ' + d.name;
+  $('hdr').textContent = 'Welcome ' + d.name + ' · ' + d.shift + ' shift';
   const o = $('open');
   if (d.open.length){ o.innerHTML = '<b>No check-out recorded:</b> ' + d.open.map(esc).join(', ') + '<br>Admin must correct these in Daily Log.'; o.classList.remove('hidden'); }
   else o.classList.add('hidden');
@@ -167,43 +167,29 @@ function render(d){
 
 const LEAVE = { SL: 'Sick Leave', EL: 'Emergency Leave', AV: 'Annual Vacation', WL: 'Warning Leave', PL: 'Personal Leave (unpaid)', L: 'Leave / Day off' };
 const LEAVE_UR = { SL: 'بیماری کی چھٹی', EL: 'ہنگامی چھٹی', AV: 'سالانہ چھٹی', WL: 'وارننگ چھٹی', PL: 'ذاتی چھٹی (بغیر تنخواہ)', L: 'چھٹی / آف' };
-const LEAVE_OPTS = Object.keys(LEAVE).map(k => '<option value="' + k + '">' + LEAVE[k] + ' · ' + LEAVE_UR[k] + '</option>').join('');
+const LEAVE_OPTS = Object.keys(LEAVE).map(k => '<option value="' + k + '">' + LEAVE[k] + '</option>').join('');
 
 /* ---- in-page confirmation (replaces browser pop-ups) ---- */
 function ask(o, onYes, onNo){
   $('mTitle').textContent = o.title; $('mTitle').className = o.warn ? 'warnh' : '';
   $('mEn').innerHTML = esc(o.en).replace(/\n/g, '<br>');
-  $('mUr').textContent = o.ur || ''; $('mUr').style.display = o.ur ? '' : 'none';
-  $('mSpeak').style.display = o.ur ? '' : 'none';
   $('mForm').style.display = o.form ? '' : 'none';
   if (o.form) { $('mReason').value = ''; $('mNote').value = ''; }
   $('mNames').textContent = o.names && o.names.length ? o.names.join(' · ') : '';
-  $('mYes').textContent = o.yes || 'Yes · ہاں'; $('mYes').className = o.warn ? 'out' : 'pri';
-  const close = () => { $('modal').style.display = 'none'; try { speechSynthesis.cancel(); } catch (e) {} };
+  $('mYes').textContent = o.yes || 'Yes'; $('mYes').className = o.warn ? 'out' : 'pri';
+  const close = () => { $('modal').style.display = 'none'; };
   $('mYes').onclick = () => {
     let f = null;
     if (o.form) {
       f = { reason: $('mReason').value, note: $('mNote').value.trim() };
-      if (!f.reason) { toast('Select a reason · وجہ منتخب کریں', false); return; }
-      if (f.reason === 'OTHER' && !f.note) { toast('Write a note for Other · نوٹ لکھیں', false); return; }
+      if (!f.reason) { toast('Select a reason', false); return; }
+      if (f.reason === 'OTHER' && !f.note) { toast('Write a note for Other', false); return; }
     }
     close(); onYes(f);
   };
   $('mNo').onclick = () => { close(); if (onNo) onNo(); };
-  $('mSpeak').onclick = () => speakUr(o.ur);
   $('modal').style.display = 'flex';
 }
-function speakUr(t){
-  try {
-    const v = speechSynthesis.getVoices().find(x => /^ur/i.test(x.lang));
-    speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance(t); u.lang = v ? v.lang : 'ur-PK'; if (v) u.voice = v; u.rate = 0.9;
-    speechSynthesis.speak(u);
-    if (!v) toast('No Urdu voice found on this phone. Install it: Settings › Google Text-to-speech › Urdu', false);
-  } catch (e) { toast('Voice not supported on this phone', false); }
-}
-try { speechSynthesis.getVoices(); speechSynthesis.onvoiceschanged = () => speechSynthesis.getVoices(); } catch (e) {}
-
 function outMsg(p, names){
   const n = names.length, who = n === 1 ? names[0] : n + ' workers', whoUr = n === 1 ? names[0] : n + ' ورکرز';
   const early = p.early || [], en = [], ur = [];
@@ -219,13 +205,13 @@ function outMsg(p, names){
   en.push(risky ? 'Check out ' + who + ' anyway?' : 'Check OUT ' + who + ' now? Time is counted until ' + p.counted + '.');
   ur.push(risky ? 'کیا پھر بھی ' + whoUr + ' کا چیک آؤٹ کرنا ہے؟' : 'کیا ابھی ' + whoUr + ' کا چیک آؤٹ کرنا ہے؟ وقت ' + p.counted + ' تک شمار ہوگا۔');
   return { names: names, warn: risky, form: early.length > 0,
-    title: early.length ? '⚠ Early check-out · جلدی چیک آؤٹ' : p.warn ? '⚠ Hour not complete · گھنٹہ مکمل نہیں ہوا' : 'Check Out · چیک آؤٹ',
+    title: early.length ? '⚠ Early check-out' : p.warn ? '⚠ Hour not complete' : 'Check Out',
     en: en.join('\n\n'), ur: ur.join(' '),
-    yes: risky ? 'Check out anyway · پھر بھی چیک آؤٹ' : 'Check out · چیک آؤٹ' };
+    yes: risky ? 'Check out anyway' : 'Check out' };
 }
 function inMsg(names, lv){
   const n = names.length, who = n === 1 ? names[0] : n + ' workers', whoUr = n === 1 ? names[0] : n + ' ورکرز';
-  return { names: names, title: 'Check In · چیک اِن', yes: 'Check in · چیک اِن',
+  return { names: names, title: 'Check In', yes: 'Check in',
     en: 'Check IN ' + who + ' now?' + (lv ? '\n' + names[0] + ' is marked ' + LEAVE[lv] + '. Checking in will change this to Present.' : ''),
     ur: 'کیا ابھی ' + whoUr + ' کا چیک اِن کرنا ہے؟' + (lv ? ' یہ ' + LEAVE_UR[lv] + ' پر درج ہے، چیک اِن کرنے سے حاضری لگ جائے گی۔' : '') };
 }
@@ -233,7 +219,7 @@ function inMsg(names, lv){
 function selAll(cb){ document.querySelectorAll('#list .chk').forEach(c => c.checked = cb.checked); }
 function bulk(fn){
   const names = [...document.querySelectorAll('#list .chk:checked')].map(c => window._list[+c.dataset.i].name);
-  if (!names.length) { toast('Tick at least one worker first · پہلے ورکر منتخب کریں', false); return; }
+  if (!names.length) { toast('Tick at least one worker first', false); return; }
   const go = (loc, f) => call(fn + 'Many', [PIN, names, loc].concat(f ? [f.reason, f.note] : []), r => {
     render(r.roster);
     toast(r.ok + ' worker(s) ' + (fn === 'checkIn' ? 'checked in' : 'checked out') +
@@ -255,7 +241,7 @@ function act(fn, i){
 }
 function abs(i, sel){
   const w = window._list[i], code = sel.value; if (!code) return;
-  ask({ title: 'Leave · چھٹی', names: [w.name], yes: 'Mark leave · چھٹی درج کریں',
+  ask({ title: 'Leave', names: [w.name], yes: 'Mark leave',
         en: 'Mark ' + w.name + ' as ' + LEAVE[code] + '?',
         ur: 'کیا ' + w.name + ' کو ' + LEAVE_UR[code] + ' پر درج کرنا ہے؟' },
     () => call('markAbsent', [PIN, w.name, code], d => { render(d); toast(w.name + ' marked ' + LEAVE[code], true); }),
@@ -266,18 +252,18 @@ function abs(i, sel){
 let EXEC_URL = '';
 function getLoc(ok, silent){
   if (!navigator.geolocation) { if (!silent) locFail({ code: 0 }); return; }
-  if (!silent) toast('Getting location… · لوکیشن لی جا رہی ہے', true);
+  if (!silent) toast('Getting location…', true);
   navigator.geolocation.getCurrentPosition(
     p => ok({ lat: p.coords.latitude, lng: p.coords.longitude, acc: Math.round(p.coords.accuracy) }),
     e => { if (!silent) locFail(e); },
     { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 });
 }
 function locFail(e){
-  ask({ title: '📍 Location required · لوکیشن ضروری ہے', warn: true,
+  ask({ title: '📍 Location required', warn: true,
     en: 'Attendance can only be marked with location ON, inside WORKMEC FZE.\n1. Turn ON location (GPS) on the phone.\n2. Allow location for this app (browser settings › Site settings › Location).\n3. Try again.' +
         (e && e.code === 3 ? '\nGPS took too long – move near a window or outside and try again.' : ''),
     ur: 'حاضری صرف لوکیشن آن ہونے پر اور ورک میک کمپنی کے اندر لگے گی۔ فون کی لوکیشن (جی پی ایس) آن کریں، اس ایپ کو لوکیشن کی اجازت دیں اور دوبارہ کوشش کریں۔',
-    yes: 'OK · ٹھیک ہے' },
+    yes: 'OK' },
     () => {});
 }
 function setSiteHere(){

@@ -110,6 +110,10 @@
       <button class="pri" style="width:100%;margin-top:8px" onclick="aSave()">Save</button>
     </div>
     <div class="card">
+      <b>Leave salary (annual vacation)</b>
+      <div id="lsList" class="hint">No worker on annual vacation.</div>
+    </div>
+    <div class="card">
       <b>Admin – whole shift at once (no location check)</b>
       <div class="hint">Check in / check out the complete team in one go. Untick anyone who was absent. Workers on leave start unticked.</div>
       <div class="row" style="margin-top:8px">
@@ -160,6 +164,10 @@
   </div>
   <div id="mDays" style="display:none;margin:8px 0"><b>How many days?</b><br>
     <input id="mDaysIn" type="number" min="1" max="365" inputmode="numeric" placeholder="Number of days" style="width:100%;margin-top:6px">
+    <div id="mLs" style="display:none;margin-top:10px">
+      <label style="display:flex;align-items:center;gap:8px;font-weight:bold"><input type="checkbox" id="mLsChk" class="chk" onchange="$('mLsAmt').style.display = this.checked ? '' : 'none'"> Leave salary paid</label>
+      <input id="mLsAmt" type="number" min="1" step="any" inputmode="decimal" placeholder="Leave salary amount (AED)" style="width:100%;margin-top:6px;display:none">
+    </div>
   </div>
   <div id="mAdv" style="display:none;margin:8px 0">
     <label style="display:block">Date<br><input id="mAdvDate" type="date" style="width:100%"></label>
@@ -228,7 +236,8 @@ function render(d){
     const lvTxt = !lv ? '' : lv.left > 0 ? '<b>' + lv.left + ' day' + (lv.left === 1 ? '' : 's') + ' left</b> · back on duty ' + niceD(lv.ret)
        : lv.left === 0 ? '<span class="due">Due back today (' + niceD(lv.ret) + ')</span>'
                                         : '<span class="due">Return date passed (' + niceD(lv.ret) + ') – not back yet</span>';
-    const times = (lvTxt ? lvTxt + (w.inT || w.by ? ' · ' : '') : '') + (w.adv ? '<b style="color:#C62828">Advance ' + esc(w.adv) + ' AED</b>' + (w.inT || w.by ? ' · ' : '') : '') + (w.inT ? 'In ' + esc(w.inT) : '') + (w.by ? (w.inT ? ' · ' : '') + 'by ' + esc(w.by) : '') + (w.outT ? ' · Out ' + esc(w.outT) + ' · OT ' + esc(w.ot) + 'h' : '') +
+    const lsTxt = lv && lv.ls ? ' · Leave salary: ' + (/^PAID/.test(lv.ls) ? '<b style="color:#2E7D32">' + esc(lv.ls) + '</b>' : '<b class="due">' + esc(lv.ls) + '</b>') : '';
+    const times = (lvTxt ? lvTxt + lsTxt + (w.inT || w.by ? ' · ' : '') : '') + (w.adv ? '<b style="color:#C62828">Advance ' + esc(w.adv) + ' AED</b>' + (w.inT || w.by ? ' · ' : '') : '') + (w.inT ? 'In ' + esc(w.inT) : '') + (w.by ? (w.inT ? ' · ' : '') + 'by ' + esc(w.by) : '') + (w.outT ? ' · Out ' + esc(w.outT) + ' · OT ' + esc(w.ot) + 'h' : '') +
                   (w.flags ? ' · <span class="flag">' + esc(w.flags) + '</span>' : '');
     const locked = !w.inT && (lv || absent);   // on any leave: never ticked by Select all, only his own Check In brings him back
     return '<div class="card' + (locked ? ' onleave' : '') + '"><div class="row">' +
@@ -257,6 +266,7 @@ function ask(o, onYes, onNo){
   $('mForm').style.display = o.form ? '' : 'none';
   if (o.form) { $('mReason').value = ''; $('mNote').value = ''; }
   $('mDays').style.display = o.days ? '' : 'none'; $('mDaysIn').value = '';
+  $('mLs').style.display = o.ls ? '' : 'none'; $('mLsChk').checked = false; $('mLsAmt').value = ''; $('mLsAmt').style.display = 'none';
   $('mAdv').style.display = o.adv ? '' : 'none'; if (o.adv) { $('mAdvDate').value = o.adv; $('mAdvAmt').value = ''; $('mAdvNote').value = ''; }
   $('mBrk').style.display = o.brk ? '' : 'none'; document.querySelectorAll('input[name=brk]').forEach(r => r.checked = false);
   $('mNames').textContent = o.names && o.names.length ? o.names.join(' · ') : '';
@@ -279,6 +289,11 @@ function ask(o, onYes, onNo){
       const n = Math.floor(Number($('mDaysIn').value));
       if (!(n >= 1 && n <= 365)) { toast('Enter the number of days', false); return; }
       f = Object.assign(f || {}, { days: n });
+    }
+    if (o.ls) {
+      const paid = $('mLsChk').checked, a = Number($('mLsAmt').value);
+      if (paid && !(a > 0)) { toast('Enter the leave salary amount', false); return; }
+      f = Object.assign(f || {}, { lsPaid: paid, lsAmt: paid ? a : '' });
     }
     if (o.brk) {
       const b = document.querySelector('input[name=brk]:checked');
@@ -357,9 +372,9 @@ function adv(i){
 function abs(i, sel){
   const w = window._list[i], code = sel.value; if (!code) return;
   const long = LONG.indexOf(code) >= 0;
-  ask({ title: 'Leave', names: [w.name], yes: 'Mark leave', days: long,
+  ask({ title: 'Leave', names: [w.name], yes: 'Mark leave', days: long, ls: code === 'AV',
         en: 'Mark ' + w.name + ' as ' + LEAVE[code] + '?' + (long ? '\nHe will stay at the top of the list, marked on leave every day, until you check him in.' : '') },
-    f => call('markAbsent', [PIN, w.name, code].concat(long ? [f.days] : []), d => { render(d); toast(w.name + ' marked ' + LEAVE[code] + (long ? ' for ' + f.days + ' days' : ''), true); }),
+    f => call('markAbsent', [PIN, w.name, code].concat(long ? [f.days, !!f.lsPaid, f.lsAmt || ''] : []), d => { render(d); toast(w.name + ' marked ' + LEAVE[code] + (long ? ' for ' + f.days + ' days' : ''), true); }),
     () => { sel.value = ''; });
 }
 
@@ -408,6 +423,20 @@ function aSave(){
   ask({ title: 'Admin – save attendance', warn: true, names: [name], yes: 'Save',
         en: name + '\nDate: ' + ds + '\nCheck in: ' + (tin || '(unchanged)') + '\nCheck out: ' + (tout || '(none)') + '\nNote: ' + note },
     () => call('adminSet', [PIN, name, ds, tin, tout, note, $('aReason').value, note, $('aBrk').value], m => { toast(m, true); $('aNote').value = ''; $('aReason').value = ''; $('aBrk').value = ''; aLoad(); }));
+}
+function lsDraw(){
+  const rows = (window._staff || []).filter(r => r.active && r.leave === 'AV');
+  $('lsList').innerHTML = !rows.length ? 'No worker on annual vacation.' : rows.map(r =>
+    '<div style="padding:6px 0;border-bottom:1px solid var(--line)"><b>' + esc(r.name) + '</b> · back ' + esc(niceD(r.leaveRet)) + ' · ' +
+    (/^PAID/.test(r.ls) ? '<b style="color:#2E7D32">' + esc(r.ls) + '</b>' : '<b class="due">' + esc(r.ls || 'NOT PAID') + '</b>') +
+    '<div class="row" style="margin-top:6px"><input type="number" min="1" step="any" inputmode="decimal" id="ls_' + esc(r.name).replace(/\W/g, '_') + '" placeholder="Amount paid (AED)" style="flex:1">' +
+    '<button class="pri" onclick="lsSave(\'' + esc(r.name) + '\')">Mark paid</button></div></div>').join('');
+}
+function lsSave(name){
+  const a = Number($('ls_' + name.replace(/\W/g, '_')).value);
+  if (!(a > 0)) { toast('Enter the amount paid', false); return; }
+  ask({ title: 'Leave salary paid', names: [name], yes: 'Save', en: name + '\nLeave salary paid: ' + aed(a) },
+    () => call('setLeaveSalary', [PIN, name, a], rows => { toast(name + ': leave salary saved', true); drawStaff(rows); }));
 }
 function tDraw(){
   const sh = $('tShift').value, rows = (window._staff || []).filter(r => r.active && r.shift === sh);
@@ -484,7 +513,7 @@ function drawStaff(rows){
   $('aWorker').value = keep;
   if (!$('aDate').value) $('aDate').value = dubaiNow().toISOString().slice(0, 10);
   if (!$('tDate').value) $('tDate').value = $('aDate').value;
-  tDraw();
+  tDraw(); lsDraw();
   const opts = '<option value="">— Select worker —</option>' + rows.filter(r => r.active).map(r => '<option value="' + esc(r.name) + '">' + esc(r.name) + ' (' + r.shift + ')</option>').join('');
   ['vWorker', 'lWorker'].forEach(id => { const k = $(id).value; $(id).innerHTML = opts; $(id).value = k; });
   if (!$('vDate').value) $('vDate').value = $('aDate').value;

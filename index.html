@@ -47,9 +47,13 @@
   #sup{padding-bottom:140px}
   #msg{z-index:60;bottom:130px}
   select{max-width:100%}
-  #modal,#sigM{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;z-index:50;padding:16px}
-  #modal .box,#sigM .box{background:#fff;border-radius:12px;max-width:480px;width:100%;max-height:90vh;overflow:auto;padding:16px}
-  #modal h3,#sigM h3{margin:0 0 10px;font-size:18px}
+  #modal,#sigM,#rcM{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;z-index:50;padding:16px}
+  #modal .box,#sigM .box,#rcM .box{background:#fff;border-radius:12px;max-width:480px;width:100%;max-height:90vh;overflow:auto;padding:16px}
+  #modal h3,#sigM h3,#rcM h3{margin:0 0 10px;font-size:18px}
+  #rcM{z-index:55} #rcM td{padding:4px 6px;vertical-align:top} #rcM td:first-child{color:var(--muted);white-space:nowrap}
+  .tabs{display:flex;flex-wrap:wrap;gap:6px;position:sticky;top:0;z-index:5;background:var(--bg);padding:8px 0;margin-bottom:4px}
+  .tabs button{flex:1 1 30%;background:#E5E7EB;color:#1F2937;padding:10px 6px;font-size:14px}
+  .tabs button.on{background:var(--blue);color:#fff}
   #sigM{z-index:60} #sigM label{display:block;padding:5px 0} #modal h3.warnh{color:var(--red)}
   #mEn{font-size:15px;line-height:1.5}
   .ur{direction:rtl;text-align:right;font-family:'Noto Nastaliq Urdu',serif;font-size:18px;line-height:2.1;background:#F1F5F9;border-radius:8px;padding:6px 12px;margin:10px 0}
@@ -85,7 +89,10 @@
   </div>
 
   <div id="adm" class="hidden">
-    <div class="card">
+    <div class="tabs" id="tabs">
+      <button data-p="att" onclick="pg('att')">Attendance</button><button data-p="staff" onclick="pg('staff')">Staff</button><button data-p="money" onclick="pg('money')">Money</button><button data-p="ls" onclick="pg('ls')">Leave Salary</button><button data-p="set" onclick="pg('set')">Settings</button>
+    </div>
+    <div class="card" data-pg="staff">
       <b>Add worker</b>
       <div class="row" style="margin-top:8px">
         <input id="nName" placeholder="Name" style="flex:2;min-width:140px">
@@ -94,7 +101,7 @@
         <button class="pri" onclick="addW()">Add</button>
       </div>
     </div>
-    <div class="card">
+    <div class="card" data-pg="att">
       <b>Admin attendance – add / correct (no location check)</b>
       <div class="hint">For outside work, missed punches or disputes. Saved as "Admin" with your note. Night shift: times after midnight (e.g. 04:00) count on the next morning.</div>
       <select id="aWorker" style="width:100%" onchange="aLoad()"></select>
@@ -110,11 +117,16 @@
       <input id="aNote" placeholder="Note – why (required)" style="width:100%;margin-top:8px">
       <button class="pri" style="width:100%;margin-top:8px" onclick="aSave()">Save</button>
     </div>
-    <div class="card">
+    <div class="card" data-pg="ls">
       <b>Leave salary (annual vacation)</b>
       <div id="lsList" class="hint">No worker on annual vacation.</div>
     </div>
-    <div class="card">
+    <div class="card" data-pg="ls">
+      <b>Leave salary payments &amp; receipts</b>
+      <input id="lsrQ" placeholder="Search by name" oninput="lsrDraw()" style="width:100%;margin-top:8px">
+      <div id="lsrList" class="hint" style="margin-top:8px">Loading…</div>
+    </div>
+    <div class="card" data-pg="att">
       <b>Admin – whole shift at once (no location check)</b>
       <div class="hint">Check in / check out the complete team in one go. Untick anyone who was absent. Workers on leave start unticked.</div>
       <div class="row" style="margin-top:8px">
@@ -133,7 +145,7 @@
       <input id="tNote" placeholder="Note – why (required)" style="width:100%;margin-top:8px">
       <button class="pri" style="width:100%;margin-top:8px" onclick="tSave()">Save for selected workers</button>
     </div>
-    <div class="card">
+    <div class="card" data-pg="money">
       <b>Advance</b>
       <select id="vWorker" style="width:100%;margin-top:8px"></select>
       <div class="row" style="margin-top:8px"><input id="vDate" type="date" style="flex:1"><input id="vAmt" type="number" min="1" step="any" inputmode="decimal" placeholder="Amount (AED)" style="flex:1"></div>
@@ -141,7 +153,7 @@
       <button class="pri" style="width:100%;margin-top:8px" onclick="vSave()">Save advance</button>
       <div id="vList" class="hint" style="margin-top:10px"></div>
     </div>
-    <div class="card">
+    <div class="card" data-pg="money">
       <b>Loan (admin only)</b>
       <select id="lWorker" style="width:100%;margin-top:8px"></select>
       <label style="display:block;margin-top:8px">Approval date<br><input id="lDate" type="date" style="width:100%"></label>
@@ -150,8 +162,8 @@
       <button class="pri" style="width:100%;margin-top:8px" onclick="lSave()">Save loan</button>
       <div id="lList" class="hint" style="margin-top:10px"></div>
     </div>
-    <div class="card"><button class="pri" style="width:100%" onclick="setSiteHere()">📍 Set company location = my current position</button></div>
-    <div class="card"><table id="staff"></table></div>
+    <div class="card" data-pg="set"><button class="pri" style="width:100%" onclick="setSiteHere()">📍 Set company location = my current position</button></div>
+    <div class="card" data-pg="staff"><table id="staff"></table></div>
   </div>
 </main>
 <div id="msg"></div>
@@ -180,6 +192,14 @@
     <label style="display:block;padding:6px 0"><input type="radio" name="brk" value="N"> No break</label>
   </div>
   <div class="btns"><button id="mNo" class="grey">Cancel</button><button id="mYes" class="pri">Yes</button></div>
+</div></div>
+<div id="rcM"><div class="box">
+  <img src="logo.png" alt="WORKMEC" style="display:block;max-width:220px;margin:0 auto 6px">
+  <h3 style="text-align:center">Leave Salary Receipt</h3>
+  <table id="rcT" style="width:100%;border-collapse:collapse"></table>
+  <div class="hint" style="margin-top:10px">Signature of the person who received the money:</div>
+  <div id="rcSig" style="border:1px solid var(--line);border-radius:8px;min-height:80px;display:flex;align-items:center;justify-content:center;background:#fff"></div>
+  <div class="btns"><button class="pri" onclick="$('rcM').style.display='none'">Close</button></div>
 </div></div>
 <div id="sigM"><div class="box">
   <h3>Leave salary – signature</h3>
@@ -222,7 +242,7 @@ function doLogin(){
   PIN = $('pin').value.trim();
   call('login', [PIN], r => {
     $('login').classList.add('hidden');
-    if (r.role === 'ADMIN') { $('adm').classList.remove('hidden'); $('hdr').textContent = 'Admin – staff management'; loadStaff(); }
+    if (r.role === 'ADMIN') { $('adm').classList.remove('hidden'); $('hdr').textContent = 'Admin'; loadStaff(); let p = 'att'; try { p = localStorage.getItem('admPg') || 'att'; } catch (e) {} pg(p); }
     else { $('sup').classList.remove('hidden'); refresh(); getLoc(() => {}, true); }   // ask location permission early
   });
 }
@@ -443,7 +463,7 @@ function lsDraw(){
   const rows = (window._staff || []).filter(r => r.active && r.leave === 'AV');
   $('lsList').innerHTML = !rows.length ? 'No worker on annual vacation.' : rows.map(r =>
     '<div style="padding:6px 0;border-bottom:1px solid var(--line)"><b>' + esc(r.name) + '</b> · back ' + esc(niceD(r.leaveRet)) + ' · ' +
-    (/^PAID/.test(r.ls) ? '<b style="color:#2E7D32">' + esc(r.ls) + '</b>' + (r.lsBy ? ' · received by ' + esc(r.lsBy) : '') + (r.lsSig ? ' · <a href="' + esc(r.lsSig) + '" target="_blank">signature</a>' : ' · no signature') : '<b class="due">' + esc(r.ls || 'NOT PAID') + '</b>') +
+    (/^PAID/.test(r.ls) ? '<b style="color:#2E7D32">' + esc(r.ls) + '</b>' + (r.lsBy ? ' · received by ' + esc(r.lsBy) : '') + (/^Signed/.test(r.lsSig) ? ' · signed ✍' : ' · no signature') : '<b class="due">' + esc(r.ls || 'NOT PAID') + '</b>') +
     '<div class="row" style="margin-top:6px"><input type="number" min="1" step="any" inputmode="decimal" id="ls_' + esc(r.name).replace(/\W/g, '_') + '" placeholder="Amount paid (AED)" style="flex:1">' +
     '<button class="pri" onclick="lsSave(\'' + esc(r.name) + '\')">Mark paid</button></div></div>').join('');
 }
@@ -452,7 +472,7 @@ function lsSave(name){
   if (!(a > 0)) { toast('Enter the amount paid', false); return; }
   ask({ title: 'Leave salary paid', names: [name], yes: 'Save', en: name + '\nLeave salary paid: ' + aed(a) },
     () => sign({ worker: name, optional: true, text: 'Leave salary of ' + aed(a) + ' for ' + name + ', paid on ' + niceD(dubaiNow().toISOString().slice(0, 10)) + '.' },
-      s => call('setLeaveSalary', [PIN, name, a, s.by, s.sig], rows => { toast(name + ': leave salary saved', true); drawStaff(rows); })));
+      s => call('setLeaveSalary', [PIN, name, a, s.by, s.sig], rows => { toast(name + ': leave salary saved', true); drawStaff(rows); lsrLoad(); })));
 }
 /* ---- signature pad (proof that leave salary was received) ---- */
 let SIG_DIRTY = false;
@@ -468,9 +488,12 @@ function sign(o, done, cancel){
     const other = document.querySelector('input[name=rcv]:checked').value === 'O', on = $('sigOther').value.trim();
     if (other && !on) { toast('Write the name of the person who received it', false); return; }
     if (!SIG_DIRTY) { toast('Signature is required', false); return; }
-    close(); done({ by: other ? on : o.worker, sig: $('sigPad').toDataURL('image/png') });
+    const sg = sigSmall(); if (sg.length > 48000) { toast('Signature too big – press Clear and sign again', false); return; }
+    close(); done({ by: other ? on : o.worker, sig: sg });
   };
 }
+/** Signature saved at half size so it fits in one sheet cell. */
+function sigSmall(){ const c = $('sigPad'), s = document.createElement('canvas'); s.width = 300; s.height = 130; s.getContext('2d').drawImage(c, 0, 0, 300, 130); return s.toDataURL('image/png'); }
 function sigClear(){ const c = $('sigPad'), x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height); SIG_DIRTY = false; }
 (function(){
   const c = $('sigPad'), x = c.getContext('2d'); let down = false, last = null;
@@ -481,6 +504,30 @@ function sigClear(){ const c = $('sigPad'), x = c.getContext('2d'); x.fillStyle 
     x.beginPath(); x.moveTo(last.x, last.y); x.lineTo(p.x, p.y); x.stroke(); last = p; SIG_DIRTY = true; e.preventDefault(); });
   ['pointerup', 'pointercancel'].forEach(t => c.addEventListener(t, () => { down = false; }));
 })();
+/* ---- admin pages ---- */
+function pg(p){
+  document.querySelectorAll('#adm [data-pg]').forEach(c => c.style.display = c.dataset.pg === p ? '' : 'none');
+  document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.p === p));
+  try { localStorage.setItem('admPg', p); } catch (e) {}
+  if (p === 'ls') lsrLoad();
+}
+/* ---- leave salary payments & receipts ---- */
+function lsrLoad(){ call('listLeaveSalary', [PIN], l => { window._lsr = l; lsrDraw(); }); }
+function lsrDraw(){
+  const q = $('lsrQ').value.trim().toLowerCase(), l = (window._lsr || []).filter(x => !q || x.name.toLowerCase().includes(q));
+  $('lsrList').innerHTML = !l.length ? 'No payments recorded.' : '<table style="width:100%">' + l.map(x =>
+    '<tr onclick="rc(\'' + esc(x.id) + '\')" style="cursor:pointer"><td>' + esc(niceD(x.ds)) + '</td><td><b>' + esc(x.name) + '</b><br><small>received by ' + esc(x.by || '—') + '</small></td>' +
+    '<td><b>' + aed(x.amt) + '</b><br><small>' + (x.signed ? 'signed ✍' : 'no signature') + '</small></td><td><button class="grey">View</button></td></tr>').join('') + '</table>';
+}
+function rc(id){
+  call('getLsReceipt', [PIN, id], r => {
+    const row = (k, v) => '<tr><td>' + k + '</td><td><b>' + esc(v) + '</b></td></tr>';
+    $('rcT').innerHTML = row('Worker', r.name) + row('Amount', aed(r.amt)) + row('Paid on', niceD(r.ds) + ' ' + r.ds.slice(0, 4)) +
+      row('Received by', r.by || '—') + row('Entered by', r.ent) + row('Recorded', r.at) + row('Receipt no.', r.id);
+    $('rcSig').innerHTML = r.sig ? '<img src="' + r.sig + '" alt="signature" style="max-width:100%">' : '<span class="due">No signature</span>';
+    $('rcM').style.display = 'flex';
+  });
+}
 function tDraw(){
   const sh = $('tShift').value, rows = (window._staff || []).filter(r => r.active && r.shift === sh);
   $('tList').innerHTML = rows.map(r => '<label style="display:block;padding:5px 0"><input type="checkbox" value="' + esc(r.name) + '"' + (r.leave ? '' : ' checked') + '> ' + esc(r.name) +

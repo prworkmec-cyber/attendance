@@ -109,6 +109,25 @@
       <input id="aNote" placeholder="Note – why (required)" style="width:100%;margin-top:8px">
       <button class="pri" style="width:100%;margin-top:8px" onclick="aSave()">Save</button>
     </div>
+    <div class="card">
+      <b>Admin – whole shift at once (no location check)</b>
+      <div class="hint">Check in / check out the complete team in one go. Untick anyone who was absent. Workers on leave start unticked.</div>
+      <div class="row" style="margin-top:8px">
+        <select id="tShift" style="flex:1" onchange="tDraw()"><option>DAY</option><option>NIGHT</option></select>
+        <input id="tDate" type="date" style="flex:1">
+      </div>
+      <div class="row" style="margin-top:8px">
+        <label style="flex:1">Check in<br><input id="tIn" type="time" style="width:100%"></label>
+        <label style="flex:1">Check out<br><input id="tOut" type="time" style="width:100%"></label>
+      </div>
+      <div class="row" style="margin-top:6px"><button class="grey" style="flex:1" onclick="aNow('tIn')">In = now</button><button class="grey" style="flex:1" onclick="aNow('tOut')">Out = now</button></div>
+      <label style="display:block;margin:10px 0 4px"><input type="checkbox" id="tAll" onchange="document.querySelectorAll('#tList input').forEach(c => c.checked = this.checked)"> <b>Select all</b></label>
+      <div id="tList"></div>
+      <select id="tReason" style="width:100%;margin-top:8px"><option value="">Early check-out reason (only if under 10 h)</option><option value="SL">Sick</option><option value="PL">Personal (unpaid)</option><option value="OTHER">Other</option></select>
+      <select id="tBrk" style="width:100%;margin-top:8px"><option value="">Sunday lunch break? (Sundays only)</option><option value="Y">Break taken – deduct 1 h</option><option value="N">No break</option></select>
+      <input id="tNote" placeholder="Note – why (required)" style="width:100%;margin-top:8px">
+      <button class="pri" style="width:100%;margin-top:8px" onclick="tSave()">Save for selected workers</button>
+    </div>
     <div class="card"><button class="pri" style="width:100%" onclick="setSiteHere()">📍 Set company location = my current position</button></div>
     <div class="card"><table id="staff"></table></div>
   </div>
@@ -354,6 +373,26 @@ function aSave(){
         en: name + '\nDate: ' + ds + '\nCheck in: ' + (tin || '(unchanged)') + '\nCheck out: ' + (tout || '(none)') + '\nNote: ' + note },
     () => call('adminSet', [PIN, name, ds, tin, tout, note, $('aReason').value, note, $('aBrk').value], m => { toast(m, true); $('aNote').value = ''; $('aReason').value = ''; $('aBrk').value = ''; aLoad(); }));
 }
+function tDraw(){
+  const sh = $('tShift').value, rows = (window._staff || []).filter(r => r.active && r.shift === sh);
+  $('tList').innerHTML = rows.map(r => '<label style="display:block;padding:5px 0"><input type="checkbox" value="' + esc(r.name) + '"' + (r.leave ? '' : ' checked') + '> ' + esc(r.name) +
+    (r.leave ? ' <span class="flag">on ' + esc(LEAVE[r.leave] || r.leave) + '</span>' : '') + '</label>').join('') || '<div class="hint">No active workers on this shift.</div>';
+  $('tAll').checked = rows.length > 0 && rows.every(r => !r.leave);
+}
+function tSave(){
+  const names = [...document.querySelectorAll('#tList input:checked')].map(c => c.value), ds = $('tDate').value, tin = $('tIn').value, tout = $('tOut').value, note = $('tNote').value.trim();
+  if (!names.length) { toast('Tick at least one worker', false); return; }
+  if (!ds) { toast('Pick a date', false); return; }
+  if (!tin && !tout) { toast('Enter check-in and/or check-out time', false); return; }
+  if (!note) { toast('Write a note (why)', false); return; }
+  if (new Date(ds + 'T00:00:00Z').getUTCDay() === 0 && tout && !$('tBrk').value) { toast('Sunday: select if the lunch break was taken', false); return; }
+  ask({ title: 'Admin – ' + $('tShift').value + ' shift (' + names.length + ' workers)', warn: true, names: names, yes: 'Save for all',
+        en: 'Date: ' + ds + '\nCheck in: ' + (tin || '(unchanged)') + '\nCheck out: ' + (tout || '(none)') + '\nNote: ' + note },
+    () => call('adminSetMany', [PIN, names, ds, tin, tout, note, $('tReason').value, note, $('tBrk').value], r => {
+      toast(r.ok + ' worker(s) saved' + (r.errors.length ? ' · NOT saved: ' + r.errors.join(' | ') : ''), !r.errors.length);
+      if (!r.errors.length) { $('tNote').value = ''; $('tReason').value = ''; $('tBrk').value = ''; }
+    }));
+}
 function loadStaff(){ call('listStaff', [PIN], drawStaff); }
 function drawStaff(rows){
   $('staff').innerHTML = '<tr><th>Worker</th><th>Shift</th><th>Status</th><th></th></tr>' + rows.map((r, i) =>
@@ -367,6 +406,8 @@ function drawStaff(rows){
   $('aWorker').innerHTML = '<option value="">— Select worker —</option>' + rows.map(r => '<option value="' + esc(r.name) + '">' + esc(r.name) + ' (' + r.shift + (r.active ? '' : ', removed') + ')</option>').join('');
   $('aWorker').value = keep;
   if (!$('aDate').value) $('aDate').value = dubaiNow().toISOString().slice(0, 10);
+  if (!$('tDate').value) $('tDate').value = $('aDate').value;
+  tDraw();
 }
 function addW(){
   call('addStaff', [PIN, $('nName').value, $('nTab').value, $('nShift').value], r => { $('nName').value=''; $('nTab').value=''; drawStaff(r); toast('Worker added', true); });

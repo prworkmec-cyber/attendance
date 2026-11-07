@@ -230,8 +230,9 @@ function render(d){
                                         : '<span class="due">Return date passed (' + niceD(lv.ret) + ') – not back yet</span>';
     const times = (lvTxt ? lvTxt + (w.inT || w.by ? ' · ' : '') : '') + (w.adv ? '<b style="color:#C62828">Advance ' + esc(w.adv) + ' AED</b>' + (w.inT || w.by ? ' · ' : '') : '') + (w.inT ? 'In ' + esc(w.inT) : '') + (w.by ? (w.inT ? ' · ' : '') + 'by ' + esc(w.by) : '') + (w.outT ? ' · Out ' + esc(w.outT) + ' · OT ' + esc(w.ot) + 'h' : '') +
                   (w.flags ? ' · <span class="flag">' + esc(w.flags) + '</span>' : '');
-    return '<div class="card' + (lv ? ' onleave' : '') + '"><div class="row">' +
-      '<input type="checkbox" class="chk" data-i="' + i + '" onchange="updBulk()"' + (lv ? ' disabled title="On leave – use Check In"' : '') + '>' +
+    const locked = !w.inT && (lv || absent);   // on any leave: never ticked by Select all, only his own Check In brings him back
+    return '<div class="card' + (locked ? ' onleave' : '') + '"><div class="row">' +
+      '<input type="checkbox" class="chk" data-i="' + i + '" onchange="updBulk()"' + (locked ? ' disabled title="On leave – use Check In"' : '') + '>' +
       '<div class="name">' + esc(w.name) + ' ' + badge + '</div>' +
       '<button class="in" ' + (w.inT ? 'disabled' : '') + ' onclick="act(\'checkIn\',' + i + ')">Check In</button>' +
       '<button class="out" ' + (!w.inT || w.outT ? 'disabled' : '') + ' onclick="act(\'checkOut\',' + i + ')">Check Out</button>' +

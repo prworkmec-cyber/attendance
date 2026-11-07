@@ -47,9 +47,10 @@
   #sup{padding-bottom:140px}
   #msg{z-index:60;bottom:130px}
   select{max-width:100%}
-  #modal{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;z-index:50;padding:16px}
-  #modal .box{background:#fff;border-radius:12px;max-width:480px;width:100%;max-height:90vh;overflow:auto;padding:16px}
-  #modal h3{margin:0 0 10px;font-size:18px} #modal h3.warnh{color:var(--red)}
+  #modal,#sigM{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;z-index:50;padding:16px}
+  #modal .box,#sigM .box{background:#fff;border-radius:12px;max-width:480px;width:100%;max-height:90vh;overflow:auto;padding:16px}
+  #modal h3,#sigM h3{margin:0 0 10px;font-size:18px}
+  #sigM{z-index:60} #sigM label{display:block;padding:5px 0} #modal h3.warnh{color:var(--red)}
   #mEn{font-size:15px;line-height:1.5}
   .ur{direction:rtl;text-align:right;font-family:'Noto Nastaliq Urdu',serif;font-size:18px;line-height:2.1;background:#F1F5F9;border-radius:8px;padding:6px 12px;margin:10px 0}
   #mNames{font-size:13px;color:var(--muted);margin:6px 0}
@@ -180,6 +181,16 @@
   </div>
   <div class="btns"><button id="mNo" class="grey">Cancel</button><button id="mYes" class="pri">Yes</button></div>
 </div></div>
+<div id="sigM"><div class="box">
+  <h3>Leave salary – signature</h3>
+  <div id="sigTxt" style="margin-bottom:8px"></div>
+  <label><input type="radio" name="rcv" value="W" checked onchange="$('sigOther').style.display='none'"> Received by the worker himself</label>
+  <label><input type="radio" name="rcv" value="O" onchange="$('sigOther').style.display=''"> Received by someone else (e.g. supervisor)</label>
+  <input id="sigOther" placeholder="Name of the person who received it" style="width:100%;display:none;margin:4px 0">
+  <div class="hint">The person who received the money signs below:</div>
+  <canvas id="sigPad" width="600" height="260" style="width:100%;border:2px dashed #9CA3AF;border-radius:8px;touch-action:none;background:#fff"></canvas>
+  <div class="btns"><button class="grey" onclick="sigClear()">Clear</button><button id="sigSkip" class="grey">No signature</button><button id="sigNo" class="grey">Cancel</button><button id="sigYes" class="pri">Save</button></div>
+</div></div>
 
 <script>
 const API = 'https://script.google.com/macros/s/AKfycbyC0FR05RyxhMxK1loRqrLZWp_hDt6FXX2T3Hf7fevP0itNdxwZasc7200WkermL-PsyA/exec';   // Apps Script backend
@@ -236,7 +247,7 @@ function render(d){
     const lvTxt = !lv ? '' : lv.left > 0 ? '<b>' + lv.left + ' day' + (lv.left === 1 ? '' : 's') + ' left</b> · back on duty ' + niceD(lv.ret)
        : lv.left === 0 ? '<span class="due">Due back today (' + niceD(lv.ret) + ')</span>'
                                         : '<span class="due">Return date passed (' + niceD(lv.ret) + ') – not back yet</span>';
-    const lsTxt = lv && lv.ls ? ' · Leave salary: ' + (/^PAID/.test(lv.ls) ? '<b style="color:#2E7D32">' + esc(lv.ls) + '</b>' : '<b class="due">' + esc(lv.ls) + '</b>') : '';
+    const lsTxt = lv && lv.ls ? ' · Leave salary: ' + (/^PAID/.test(lv.ls) ? '<b style="color:#2E7D32">' + esc(lv.ls) + '</b>' + (lv.by ? ' (received by ' + esc(lv.by) + (lv.signed ? ', signed ✍' : '') + ')' : '') : '<b class="due">' + esc(lv.ls) + '</b>') : '';
     const times = (lvTxt ? lvTxt + lsTxt + (w.inT || w.by ? ' · ' : '') : '') + (w.adv ? '<b style="color:#C62828">Advance ' + esc(w.adv) + ' AED</b>' + (w.inT || w.by ? ' · ' : '') : '') + (w.inT ? 'In ' + esc(w.inT) : '') + (w.by ? (w.inT ? ' · ' : '') + 'by ' + esc(w.by) : '') + (w.outT ? ' · Out ' + esc(w.outT) + ' · OT ' + esc(w.ot) + 'h' : '') +
                   (w.flags ? ' · <span class="flag">' + esc(w.flags) + '</span>' : '');
     const locked = !w.inT && (lv || absent);   // on any leave: never ticked by Select all, only his own Check In brings him back
@@ -374,7 +385,11 @@ function abs(i, sel){
   const long = LONG.indexOf(code) >= 0;
   ask({ title: 'Leave', names: [w.name], yes: 'Mark leave', days: long, ls: code === 'AV',
         en: 'Mark ' + w.name + ' as ' + LEAVE[code] + '?' + (long ? '\nHe will stay at the top of the list, marked on leave every day, until you check him in.' : '') },
-    f => call('markAbsent', [PIN, w.name, code].concat(long ? [f.days, !!f.lsPaid, f.lsAmt || ''] : []), d => { render(d); toast(w.name + ' marked ' + LEAVE[code] + (long ? ' for ' + f.days + ' days' : ''), true); }),
+    f => {
+      const go = s => call('markAbsent', [PIN, w.name, code].concat(long ? [f.days, !!f.lsPaid, f.lsAmt || '', s ? s.by : '', s ? s.sig : ''] : []), d => { render(d); toast(w.name + ' marked ' + LEAVE[code] + (long ? ' for ' + f.days + ' days' : ''), true); });
+      if (f.lsPaid) sign({ worker: w.name, text: 'Leave salary of ' + aed(f.lsAmt) + ' for ' + w.name + ', paid on ' + niceD(window._date || dubaiNow().toISOString().slice(0, 10)) + '.' }, go, () => { sel.value = ''; });
+      else go();
+    },
     () => { sel.value = ''; });
 }
 
@@ -428,7 +443,7 @@ function lsDraw(){
   const rows = (window._staff || []).filter(r => r.active && r.leave === 'AV');
   $('lsList').innerHTML = !rows.length ? 'No worker on annual vacation.' : rows.map(r =>
     '<div style="padding:6px 0;border-bottom:1px solid var(--line)"><b>' + esc(r.name) + '</b> · back ' + esc(niceD(r.leaveRet)) + ' · ' +
-    (/^PAID/.test(r.ls) ? '<b style="color:#2E7D32">' + esc(r.ls) + '</b>' : '<b class="due">' + esc(r.ls || 'NOT PAID') + '</b>') +
+    (/^PAID/.test(r.ls) ? '<b style="color:#2E7D32">' + esc(r.ls) + '</b>' + (r.lsBy ? ' · received by ' + esc(r.lsBy) : '') + (r.lsSig ? ' · <a href="' + esc(r.lsSig) + '" target="_blank">signature</a>' : ' · no signature') : '<b class="due">' + esc(r.ls || 'NOT PAID') + '</b>') +
     '<div class="row" style="margin-top:6px"><input type="number" min="1" step="any" inputmode="decimal" id="ls_' + esc(r.name).replace(/\W/g, '_') + '" placeholder="Amount paid (AED)" style="flex:1">' +
     '<button class="pri" onclick="lsSave(\'' + esc(r.name) + '\')">Mark paid</button></div></div>').join('');
 }
@@ -436,8 +451,36 @@ function lsSave(name){
   const a = Number($('ls_' + name.replace(/\W/g, '_')).value);
   if (!(a > 0)) { toast('Enter the amount paid', false); return; }
   ask({ title: 'Leave salary paid', names: [name], yes: 'Save', en: name + '\nLeave salary paid: ' + aed(a) },
-    () => call('setLeaveSalary', [PIN, name, a], rows => { toast(name + ': leave salary saved', true); drawStaff(rows); }));
+    () => sign({ worker: name, optional: true, text: 'Leave salary of ' + aed(a) + ' for ' + name + ', paid on ' + niceD(dubaiNow().toISOString().slice(0, 10)) + '.' },
+      s => call('setLeaveSalary', [PIN, name, a, s.by, s.sig], rows => { toast(name + ': leave salary saved', true); drawStaff(rows); })));
 }
+/* ---- signature pad (proof that leave salary was received) ---- */
+let SIG_DIRTY = false;
+function sign(o, done, cancel){
+  $('sigTxt').textContent = o.text;
+  document.querySelector('input[name=rcv][value=W]').checked = true; $('sigOther').style.display = 'none'; $('sigOther').value = '';
+  $('sigSkip').style.display = o.optional ? '' : 'none';
+  $('sigM').style.display = 'flex'; sigClear();
+  const close = () => { $('sigM').style.display = 'none'; };
+  $('sigNo').onclick = () => { close(); if (cancel) cancel(); };
+  $('sigSkip').onclick = () => { close(); done({ by: '', sig: '' }); };
+  $('sigYes').onclick = () => {
+    const other = document.querySelector('input[name=rcv]:checked').value === 'O', on = $('sigOther').value.trim();
+    if (other && !on) { toast('Write the name of the person who received it', false); return; }
+    if (!SIG_DIRTY) { toast('Signature is required', false); return; }
+    close(); done({ by: other ? on : o.worker, sig: $('sigPad').toDataURL('image/png') });
+  };
+}
+function sigClear(){ const c = $('sigPad'), x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height); SIG_DIRTY = false; }
+(function(){
+  const c = $('sigPad'), x = c.getContext('2d'); let down = false, last = null;
+  const pt = e => { const r = c.getBoundingClientRect(); return { x: (e.clientX - r.left) * c.width / r.width, y: (e.clientY - r.top) * c.height / r.height }; };
+  c.addEventListener('pointerdown', e => { down = true; last = pt(e); try { c.setPointerCapture(e.pointerId); } catch (_) {} e.preventDefault(); });
+  c.addEventListener('pointermove', e => { if (!down) return; const p = pt(e);
+    x.strokeStyle = '#0B2545'; x.lineWidth = 4; x.lineCap = 'round'; x.lineJoin = 'round';
+    x.beginPath(); x.moveTo(last.x, last.y); x.lineTo(p.x, p.y); x.stroke(); last = p; SIG_DIRTY = true; e.preventDefault(); });
+  ['pointerup', 'pointercancel'].forEach(t => c.addEventListener(t, () => { down = false; }));
+})();
 function tDraw(){
   const sh = $('tShift').value, rows = (window._staff || []).filter(r => r.active && r.shift === sh);
   $('tList').innerHTML = rows.map(r => '<label style="display:block;padding:5px 0"><input type="checkbox" value="' + esc(r.name) + '"' + (r.leave ? '' : ' checked') + '> ' + esc(r.name) +

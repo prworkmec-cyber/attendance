@@ -128,6 +128,23 @@
       <input id="tNote" placeholder="Note – why (required)" style="width:100%;margin-top:8px">
       <button class="pri" style="width:100%;margin-top:8px" onclick="tSave()">Save for selected workers</button>
     </div>
+    <div class="card">
+      <b>Advance</b>
+      <select id="vWorker" style="width:100%;margin-top:8px"></select>
+      <div class="row" style="margin-top:8px"><input id="vDate" type="date" style="flex:1"><input id="vAmt" type="number" min="1" step="any" inputmode="decimal" placeholder="Amount (AED)" style="flex:1"></div>
+      <input id="vNote" placeholder="Note (optional)" style="width:100%;margin-top:8px">
+      <button class="pri" style="width:100%;margin-top:8px" onclick="vSave()">Save advance</button>
+      <div id="vList" class="hint" style="margin-top:10px"></div>
+    </div>
+    <div class="card">
+      <b>Loan (admin only)</b>
+      <select id="lWorker" style="width:100%;margin-top:8px"></select>
+      <label style="display:block;margin-top:8px">Approval date<br><input id="lDate" type="date" style="width:100%"></label>
+      <div class="row" style="margin-top:8px"><input id="lTotal" type="number" min="1" step="any" inputmode="decimal" placeholder="Loan amount (AED)" style="flex:1"><input id="lMonthly" type="number" min="1" step="any" inputmode="decimal" placeholder="Monthly deduction (AED)" style="flex:1"></div>
+      <input id="lNote" placeholder="Note (optional)" style="width:100%;margin-top:8px">
+      <button class="pri" style="width:100%;margin-top:8px" onclick="lSave()">Save loan</button>
+      <div id="lList" class="hint" style="margin-top:10px"></div>
+    </div>
     <div class="card"><button class="pri" style="width:100%" onclick="setSiteHere()">📍 Set company location = my current position</button></div>
     <div class="card"><table id="staff"></table></div>
   </div>
@@ -143,6 +160,11 @@
   </div>
   <div id="mDays" style="display:none;margin:8px 0"><b>How many days?</b><br>
     <input id="mDaysIn" type="number" min="1" max="365" inputmode="numeric" placeholder="Number of days" style="width:100%;margin-top:6px">
+  </div>
+  <div id="mAdv" style="display:none;margin:8px 0">
+    <label style="display:block">Date<br><input id="mAdvDate" type="date" style="width:100%"></label>
+    <label style="display:block;margin-top:6px">Amount (AED)<br><input id="mAdvAmt" type="number" min="1" step="any" inputmode="decimal" placeholder="Amount" style="width:100%"></label>
+    <input id="mAdvNote" placeholder="Note (optional)" style="width:100%;margin-top:6px">
   </div>
   <div id="mBrk" style="display:none;margin:8px 0"><b>Sunday – lunch break taken?</b><br>
     <label style="display:block;padding:6px 0"><input type="radio" name="brk" value="Y"> Yes – 1 hour break (deduct 1 h from OT)</label>
@@ -206,7 +228,7 @@ function render(d){
     const lvTxt = !lv ? '' : lv.left > 0 ? '<b>' + lv.left + ' day' + (lv.left === 1 ? '' : 's') + ' left</b> · back on duty ' + niceD(lv.ret)
        : lv.left === 0 ? '<span class="due">Due back today (' + niceD(lv.ret) + ')</span>'
                                         : '<span class="due">Return date passed (' + niceD(lv.ret) + ') – not back yet</span>';
-    const times = (lvTxt ? lvTxt + (w.inT || w.by ? ' · ' : '') : '') + (w.inT ? 'In ' + esc(w.inT) : '') + (w.by ? (w.inT ? ' · ' : '') + 'by ' + esc(w.by) : '') + (w.outT ? ' · Out ' + esc(w.outT) + ' · OT ' + esc(w.ot) + 'h' : '') +
+    const times = (lvTxt ? lvTxt + (w.inT || w.by ? ' · ' : '') : '') + (w.adv ? '<b style="color:#C62828">Advance ' + esc(w.adv) + ' AED</b>' + (w.inT || w.by ? ' · ' : '') : '') + (w.inT ? 'In ' + esc(w.inT) : '') + (w.by ? (w.inT ? ' · ' : '') + 'by ' + esc(w.by) : '') + (w.outT ? ' · Out ' + esc(w.outT) + ' · OT ' + esc(w.ot) + 'h' : '') +
                   (w.flags ? ' · <span class="flag">' + esc(w.flags) + '</span>' : '');
     return '<div class="card' + (lv ? ' onleave' : '') + '"><div class="row">' +
       '<input type="checkbox" class="chk" data-i="' + i + '" onchange="updBulk()"' + (lv ? ' disabled title="On leave – use Check In"' : '') + '>' +
@@ -215,9 +237,9 @@ function render(d){
       '<button class="out" ' + (!w.inT || w.outT ? 'disabled' : '') + ' onclick="act(\'checkOut\',' + i + ')">Check Out</button>' +
       '<select ' + (w.inT ? 'disabled' : '') + ' onchange="abs(' + i + ',this)">' +
         '<option value="">' + (w.outT ? 'Checked out' : w.inT ? 'Active' : absent ? esc(LEAVE[w.status] || w.status) : 'Present') + '</option>' + LEAVE_OPTS +
-      '</select></div>' + (times ? '<div class="times">' + times + '</div>' : '') + '</div>';
+      '</select><button class="grey" onclick="adv(' + i + ')">+ Advance</button></div>' + (times ? '<div class="times">' + times + '</div>' : '') + '</div>';
   }).join('');
-  window._list = d.list;
+  window._list = d.list; window._date = d.date;
   $('all').checked = false; updBulk();
 }
 
@@ -234,6 +256,7 @@ function ask(o, onYes, onNo){
   $('mForm').style.display = o.form ? '' : 'none';
   if (o.form) { $('mReason').value = ''; $('mNote').value = ''; }
   $('mDays').style.display = o.days ? '' : 'none'; $('mDaysIn').value = '';
+  $('mAdv').style.display = o.adv ? '' : 'none'; if (o.adv) { $('mAdvDate').value = o.adv; $('mAdvAmt').value = ''; $('mAdvNote').value = ''; }
   $('mBrk').style.display = o.brk ? '' : 'none'; document.querySelectorAll('input[name=brk]').forEach(r => r.checked = false);
   $('mNames').textContent = o.names && o.names.length ? o.names.join(' · ') : '';
   $('mYes').textContent = o.yes || 'Yes'; $('mYes').className = o.warn ? 'out' : 'pri';
@@ -244,6 +267,12 @@ function ask(o, onYes, onNo){
       f = { reason: $('mReason').value, note: $('mNote').value.trim() };
       if (!f.reason) { toast('Select a reason', false); return; }
       if (f.reason === 'OTHER' && !f.note) { toast('Write a note for Other', false); return; }
+    }
+    if (o.adv) {
+      const a = Number($('mAdvAmt').value);
+      if (!$('mAdvDate').value) { toast('Pick a date', false); return; }
+      if (!(a > 0)) { toast('Enter the advance amount', false); return; }
+      f = { ds: $('mAdvDate').value, amt: a, note: $('mAdvNote').value.trim() };
     }
     if (o.days) {
       const n = Math.floor(Number($('mDaysIn').value));
@@ -317,6 +346,12 @@ function act(fn, i){
     if (fn === 'checkIn') { ask(inMsg([w.name], w.leave ? w.leave.code : w.status && w.status !== 'P' ? w.status : ''), () => go(loc)); return; }
     call('checkOutPreview', [PIN, w.name, [w.name]], p => ask(outMsg(p, [w.name]), f => go(loc, f)));
   });
+}
+function adv(i){
+  const w = window._list[i];
+  ask({ title: 'Advance', names: [w.name], yes: 'Save advance', adv: window._date || dubaiNow().toISOString().slice(0, 10),
+        en: 'Salary advance for ' + w.name + '. Enter the amount (note is optional).' },
+    f => call('addAdvance', [PIN, w.name, f.ds, f.amt, f.note], m => { toast(m, true); refresh(); }));
 }
 function abs(i, sel){
   const w = window._list[i], code = sel.value; if (!code) return;
@@ -393,6 +428,47 @@ function tSave(){
       if (!r.errors.length) { $('tNote').value = ''; $('tReason').value = ''; $('tBrk').value = ''; }
     }));
 }
+/* ---- admin: advances & loans ---- */
+const aed = n => Number(n).toLocaleString('en-US', { maximumFractionDigits: 2 }) + ' AED';
+function vDraw(list){
+  $('vList').innerHTML = !list.length ? 'No advances yet.' : '<b>Recent advances</b><table style="width:100%">' + list.map(a =>
+    '<tr><td>' + esc(niceD(a.ds)) + '</td><td>' + esc(a.name) + (a.note ? '<br><small>' + esc(a.note) + '</small>' : '') + '</td><td><b>' + aed(a.amt) + '</b><br><small>by ' + esc(a.by) + '</small></td>' +
+    '<td><button class="out" onclick="vDel(\'' + esc(a.id) + '\',\'' + esc(a.name) + '\',' + a.amt + ')">Delete</button></td></tr>').join('') + '</table>';
+}
+function vLoad(){ call('listAdvances', [PIN], vDraw); }
+function vSave(){
+  const name = $('vWorker').value, ds = $('vDate').value, amt = Number($('vAmt').value);
+  if (!name) { toast('Select a worker', false); return; }
+  if (!ds) { toast('Pick a date', false); return; }
+  if (!(amt > 0)) { toast('Enter the amount', false); return; }
+  call('addAdvance', [PIN, name, ds, amt, $('vNote').value.trim()], m => { toast(m, true); $('vAmt').value = ''; $('vNote').value = ''; vLoad(); });
+}
+function vDel(id, name, amt){
+  ask({ title: 'Delete advance', warn: true, names: [name], yes: 'Delete', en: 'Delete the advance of ' + aed(amt) + ' for ' + name + '?' },
+    () => call('deleteAdvance', [PIN, id], l => { toast('Advance deleted', true); vDraw(l); }));
+}
+function lDraw(list){
+  window._loans = list;
+  $('lList').innerHTML = !list.length ? 'No loans yet.' : '<b>Loans</b><table style="width:100%">' + list.map((l, i) =>
+    '<tr><td>' + esc(niceD(l.ds)) + '</td><td>' + esc(l.name) + '<br><small>' + aed(l.monthly) + ' / month · ' + esc(l.status) + (l.note ? ' · ' + esc(l.note) : '') + '</small></td>' +
+    '<td><b>' + aed(l.total) + '</b><br><small>left ' + aed(l.left) + '</small></td><td><button class="out" onclick="lDel(' + i + ')">Delete</button></td></tr>').join('') + '</table>';
+}
+function lLoad(){ call('listLoans', [PIN], lDraw); }
+function lSave(){
+  const name = $('lWorker').value, ds = $('lDate').value, t = Number($('lTotal').value), m = Number($('lMonthly').value);
+  if (!name) { toast('Select a worker', false); return; }
+  if (!ds) { toast('Pick the approval date', false); return; }
+  if (!(t > 0)) { toast('Enter the loan amount', false); return; }
+  if (!(m > 0)) { toast('Enter the monthly deduction', false); return; }
+  if (m > t) { toast('Monthly deduction cannot be more than the loan', false); return; }
+  ask({ title: 'Save loan', names: [name], yes: 'Save loan', en: name + '\nLoan: ' + aed(t) + '\nMonthly deduction: ' + aed(m) + '\nApproved: ' + ds },
+    () => call('addLoan', [PIN, name, ds, t, m, $('lNote').value.trim()], msg => { toast(msg, true); $('lTotal').value = ''; $('lMonthly').value = ''; $('lNote').value = ''; lLoad(); }));
+}
+function lDel(i){
+  const l = window._loans[i];
+  ask({ title: 'Delete loan', warn: true, names: [l.name], yes: 'Delete', en: 'Delete the loan of ' + aed(l.total) + ' for ' + l.name + ' (' + l.ds + ')?' },
+    () => call('deleteLoan', [PIN, l.row, l.name, l.ds], list => { toast('Loan deleted', true); lDraw(list); }));
+}
 function loadStaff(){ call('listStaff', [PIN], drawStaff); }
 function drawStaff(rows){
   $('staff').innerHTML = '<tr><th>Worker</th><th>Shift</th><th>Status</th><th></th></tr>' + rows.map((r, i) =>
@@ -408,6 +484,11 @@ function drawStaff(rows){
   if (!$('aDate').value) $('aDate').value = dubaiNow().toISOString().slice(0, 10);
   if (!$('tDate').value) $('tDate').value = $('aDate').value;
   tDraw();
+  const opts = '<option value="">— Select worker —</option>' + rows.filter(r => r.active).map(r => '<option value="' + esc(r.name) + '">' + esc(r.name) + ' (' + r.shift + ')</option>').join('');
+  ['vWorker', 'lWorker'].forEach(id => { const k = $(id).value; $(id).innerHTML = opts; $(id).value = k; });
+  if (!$('vDate').value) $('vDate').value = $('aDate').value;
+  if (!$('lDate').value) $('lDate').value = $('aDate').value;
+  if (!window._advLoaded) { window._advLoaded = 1; vLoad(); lLoad(); }
 }
 function addW(){
   call('addStaff', [PIN, $('nName').value, $('nTab').value, $('nShift').value], r => { $('nName').value=''; $('nTab').value=''; drawStaff(r); toast('Worker added', true); });

@@ -269,15 +269,15 @@ function doLogin(auto){
     $('pin').value = ''; LAST = Date.now(); sesSave(); $('lo').classList.remove('hidden');
     $('login').classList.add('hidden');
     if (r.role === 'ADMIN') { $('adm').classList.remove('hidden'); $('hdr').textContent = 'Admin'; loadStaff(); let p = 'att'; try { p = localStorage.getItem('admPg') || 'att'; } catch (e) {} pg(p); }
-    else { $('sup').classList.remove('hidden'); refresh(); getLoc(() => {}, true); }   // ask location permission early
-  }, e => { PIN = ''; if (auto) { sesClear(); $('pin').value = ''; } toast(e, false); });
+    else { $('sup').classList.remove('hidden'); if (r.roster) render(r.roster); else refresh(); getLoc(() => {}, true); }   // ask location permission early
+  }, e => { PIN = ''; $('login').classList.remove('hidden'); $('hdr').textContent = 'Enter your password'; if (auto) { sesClear(); $('pin').value = ''; } toast(e, false); });
 }
 $('pin').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
 (function resume(){
   let s = null, m = '';
   try { s = JSON.parse(localStorage.getItem('wmS') || 'null'); m = sessionStorage.getItem('wmMsg') || ''; sessionStorage.removeItem('wmMsg'); } catch (e) {}
   if (m) $('hdr').textContent = m;
-  if (s && s.p && Date.now() - s.t < IDLE_MS) { $('pin').value = s.p; doLogin(true); }
+  if (s && s.p && Date.now() - s.t < IDLE_MS) { $('login').classList.add('hidden'); $('hdr').textContent = 'Loading…'; $('pin').value = s.p; doLogin(true); }   // no login-screen flash on refresh
   else sesClear();
 })();
 

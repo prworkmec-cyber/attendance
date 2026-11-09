@@ -206,15 +206,19 @@
   <h3 style="text-align:center">Leave Salary Receipt</h3>
   <table id="rcT" style="width:100%;border-collapse:collapse"></table>
   <div class="hint" style="margin-top:10px">Signature of the person who received the money:</div>
-  <div id="rcSig" style="border:1px solid var(--line);border-radius:8px;min-height:80px;display:flex;align-items:center;justify-content:center;background:#fff"></div>
+  <div id="rcSig" style="border:1px solid var(--line);border-radius:8px;min-height:80px;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#fff"></div>
   <div class="btns"><button class="pri" onclick="$('rcM').style.display='none'">Close</button></div>
 </div></div>
 <div id="sigM"><div class="box">
   <h3>Leave salary – signature</h3>
   <div id="sigTxt" style="margin-bottom:8px"></div>
-  <label><input type="radio" name="rcv" value="W" checked onchange="$('sigOther').style.display='none'"> Received by the worker himself</label>
-  <label><input type="radio" name="rcv" value="O" onchange="$('sigOther').style.display=''"> Received by someone else (e.g. supervisor)</label>
+  <label><input type="radio" name="rcv" value="W" checked onchange="$('sigOther').style.display='none';$('sigPh').style.display='none'"> Received by the worker himself</label>
+  <label><input type="radio" name="rcv" value="O" onchange="$('sigOther').style.display='';$('sigPh').style.display=''"> Received by someone else (e.g. supervisor)</label>
   <input id="sigOther" placeholder="Name of the person who received it" style="width:100%;display:none;margin:4px 0">
+  <div id="sigPh" style="display:none;margin:6px 0">
+    <label class="grey" style="display:inline-block;padding:10px 14px;border-radius:8px;background:#6B7280;color:#fff;font-weight:600;cursor:pointer">📷 Take photo of this person<input id="sigCam" type="file" accept="image/*" capture="environment" style="display:none" onchange="phTake(this)"></label>
+    <img id="sigPhImg" alt="" style="display:none;max-width:120px;max-height:120px;border-radius:8px;margin-left:8px;vertical-align:middle">
+  </div>
   <div class="hint">The person who received the money signs below:</div>
   <canvas id="sigPad" width="600" height="260" style="width:100%;border:2px dashed #9CA3AF;border-radius:8px;touch-action:none;background:#fff"></canvas>
   <div class="btns"><button class="grey" onclick="sigClear()">Clear</button><button id="sigSkip" class="grey">No signature</button><button id="sigNo" class="grey">Cancel</button><button id="sigYes" class="pri">Save</button></div>
@@ -456,7 +460,7 @@ function vac(i, code){
   ask({ title: (code === 'EL' ? '' : '✈ ') + nm, names: [w.name], yes: 'Book ' + nm.toLowerCase(), vac: w.planned && w.planned.code === code ? w.planned.from : tomorrow, days: true, ls: true, txt: 'Reason / note (optional)',
         en: 'Book ' + nm.toLowerCase() + ' for ' + w.name + '. Today he works normally; from the start date he is marked on leave every day until you check him in.' },
     f => {
-      const go = s => call('planVacation', [PIN, w.name, f.from, f.days, !!f.lsPaid, f.lsAmt || '', s ? s.by : '', s ? s.sig : '', code, f.txt || ''], d => { render(d); toast(w.name + ': ' + nm.toLowerCase() + ' from ' + niceD(f.from) + ' for ' + f.days + ' days', true); });
+      const go = s => call('planVacation', [PIN, w.name, f.from, f.days, !!f.lsPaid, f.lsAmt || '', s ? s.by : '', s ? s.sig : '', code, f.txt || '', s ? s.photo : ''], d => { render(d); toast(w.name + ': ' + nm.toLowerCase() + ' from ' + niceD(f.from) + ' for ' + f.days + ' days', true); });
       if (f.lsPaid) sign({ worker: w.name, text: 'Leave salary of ' + aed(f.lsAmt) + ' for ' + w.name + ', paid on ' + niceD(window._date || dubaiNow().toISOString().slice(0, 10)) + '.' }, go);
       else go();
     });
@@ -473,7 +477,7 @@ function abs(i, sel){
   ask({ title: 'Leave', names: [w.name], yes: 'Mark leave', days: long, ls: code === 'AV' || code === 'EL',
         en: 'Mark ' + w.name + ' as ' + LEAVE[code] + '?' + (long ? '\nHe will stay at the top of the list, marked on leave every day, until you check him in.' : '') },
     f => {
-      const go = s => call('markAbsent', [PIN, w.name, code].concat(long ? [f.days, !!f.lsPaid, f.lsAmt || '', s ? s.by : '', s ? s.sig : ''] : []), d => { render(d); toast(w.name + ' marked ' + LEAVE[code] + (long ? ' for ' + f.days + ' days' : ''), true); });
+      const go = s => call('markAbsent', [PIN, w.name, code].concat(long ? [f.days, !!f.lsPaid, f.lsAmt || '', s ? s.by : '', s ? s.sig : '', s ? s.photo : ''] : []), d => { render(d); toast(w.name + ' marked ' + LEAVE[code] + (long ? ' for ' + f.days + ' days' : ''), true); });
       if (f.lsPaid) sign({ worker: w.name, text: 'Leave salary of ' + aed(f.lsAmt) + ' for ' + w.name + ', paid on ' + niceD(window._date || dubaiNow().toISOString().slice(0, 10)) + '.' }, go, () => { sel.value = ''; });
       else go();
     },
@@ -547,7 +551,7 @@ function pvOpen(code){
   const tomorrow = new Date(dubaiNow().getTime() + 86400000).toISOString().slice(0, 10), nm = code === 'EL' ? 'Emergency leave' : 'Annual vacation';
   ask({ title: nm, names: [name], yes: 'Book ' + nm.toLowerCase(), vac: tomorrow, days: true, ls: true, txt: 'Reason / note (optional)', en: 'Book ' + nm.toLowerCase() + ' for ' + name + '.' },
     f => {
-      const go = s => call('planVacation', [PIN, name, f.from, f.days, !!f.lsPaid, f.lsAmt || '', s ? s.by : '', s ? s.sig : '', code, f.txt || ''], rows => { toast(name + ': vacation booked', true); drawStaff(rows); lsrLoad(); });
+      const go = s => call('planVacation', [PIN, name, f.from, f.days, !!f.lsPaid, f.lsAmt || '', s ? s.by : '', s ? s.sig : '', code, f.txt || '', s ? s.photo : ''], rows => { toast(name + ': vacation booked', true); drawStaff(rows); lsrLoad(); });
       if (f.lsPaid) sign({ worker: name, optional: true, text: 'Leave salary of ' + aed(f.lsAmt) + ' for ' + name + ', paid on ' + niceD(dubaiNow().toISOString().slice(0, 10)) + '.' }, go);
       else go();
     });
@@ -561,13 +565,14 @@ function lsSave(name){
   if (!(a > 0)) { toast('Enter the amount paid', false); return; }
   ask({ title: 'Leave salary paid', names: [name], yes: 'Save', en: name + '\nLeave salary paid: ' + aed(a) },
     () => sign({ worker: name, optional: true, text: 'Leave salary of ' + aed(a) + ' for ' + name + ', paid on ' + niceD(dubaiNow().toISOString().slice(0, 10)) + '.' },
-      s => call('setLeaveSalary', [PIN, name, a, s.by, s.sig], rows => { toast(name + ': leave salary saved', true); drawStaff(rows); lsrLoad(); })));
+      s => call('setLeaveSalary', [PIN, name, a, s.by, s.sig, s.photo || ''], rows => { toast(name + ': leave salary saved', true); drawStaff(rows); lsrLoad(); })));
 }
 /* ---- signature pad (proof that leave salary was received) ---- */
 let SIG_DIRTY = false;
 function sign(o, done, cancel){
   $('sigTxt').textContent = o.text;
   document.querySelector('input[name=rcv][value=W]').checked = true; $('sigOther').style.display = 'none'; $('sigOther').value = '';
+  PHOTO = ''; $('sigPh').style.display = 'none'; $('sigPhImg').style.display = 'none'; $('sigCam').value = '';
   $('sigSkip').style.display = o.optional ? '' : 'none';
   $('sigM').style.display = 'flex'; sigClear();
   const close = () => { $('sigM').style.display = 'none'; };
@@ -576,10 +581,33 @@ function sign(o, done, cancel){
   $('sigYes').onclick = () => {
     const other = document.querySelector('input[name=rcv]:checked').value === 'O', on = $('sigOther').value.trim();
     if (other && !on) { toast('Write the name of the person who received it', false); return; }
+    if (other && !PHOTO) { toast('Take a photo of the person who received the salary', false); return; }
     if (!SIG_DIRTY) { toast('Signature is required', false); return; }
     const sg = sigSmall(); if (sg.length > 48000) { toast('Signature too big – press Clear and sign again', false); return; }
-    close(); done({ by: other ? on : o.worker, sig: sg });
+    close(); done({ by: other ? on : o.worker, sig: sg, photo: other ? PHOTO : '' });
   };
+}
+/** Photo of the person who received the salary – shrunk to JPEG small enough for one sheet cell. */
+let PHOTO = '';
+function phTake(inp){
+  const f = inp.files && inp.files[0]; if (!f) return;
+  const img = new Image(), url = URL.createObjectURL(f);
+  img.onload = () => {
+    URL.revokeObjectURL(url);
+    let w = 480, q = 0.7, out = '';
+    for (let k = 0; k < 8; k++) {
+      const c = document.createElement('canvas'), sc = Math.min(1, w / img.width);
+      c.width = Math.round(img.width * sc); c.height = Math.round(img.height * sc);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      out = c.toDataURL('image/jpeg', q);
+      if (out.length < 46000) break;
+      if (q > 0.45) q -= 0.1; else w = Math.round(w * 0.8);
+    }
+    if (out.length >= 46000) { toast('Photo too large – try again', false); return; }
+    PHOTO = out; $('sigPhImg').src = out; $('sigPhImg').style.display = '';
+  };
+  img.onerror = () => toast('Could not read the photo', false);
+  img.src = url;
 }
 /** Signature saved at half size so it fits in one sheet cell. */
 function sigSmall(){ const c = $('sigPad'), s = document.createElement('canvas'); s.width = 300; s.height = 130; s.getContext('2d').drawImage(c, 0, 0, 300, 130); return s.toDataURL('image/png'); }
@@ -624,7 +652,7 @@ function rc(id){
     const row = (k, v) => '<tr><td>' + k + '</td><td><b>' + esc(v) + '</b></td></tr>';
     $('rcT').innerHTML = row('Worker', r.name) + row('Amount', aed(r.amt)) + row('Paid on', niceD(r.ds) + ' ' + r.ds.slice(0, 4)) +
       row('Received by', r.by || '—') + row('Entered by', r.ent) + row('Recorded', r.at) + row('Receipt no.', r.id);
-    $('rcSig').innerHTML = r.sig ? '<img src="' + r.sig + '" alt="signature" style="max-width:100%">' :
+    $('rcSig').innerHTML = r.sig ? '<img src="' + r.sig + '" alt="signature" style="max-width:100%">' + (r.photo ? '<div style="text-align:center;padding:6px"><div class="hint">Photo of the person who received it:</div><img src="' + r.photo + '" alt="photo" style="max-width:100%;max-height:260px;border-radius:8px"></div>' : '') :
       '<div style="text-align:center;padding:8px"><span class="due">No signature</span><br><button class="pri" style="margin-top:8px" onclick="rcSign(\'' + esc(r.id) + '\')">✍ Take signature now</button></div>';
     window._rc = r;
     $('rcM').style.display = 'flex';
@@ -634,7 +662,7 @@ function rc(id){
 function rcSign(id){
   const r = window._rc; $('rcM').style.display = 'none';
   sign({ text: 'Leave salary ' + aed(r.amt) + ' paid to ' + r.name + ' on ' + niceD(r.ds) + ' ' + r.ds.slice(0, 4) + ' (receipt ' + r.id + ').', worker: r.name },
-    s => call('signLsReceipt', [PIN, id, s.by, s.sig], () => { toast('Signature saved on receipt ' + id, true); lsrLoad(); rc(id); }),
+    s => call('signLsReceipt', [PIN, id, s.by, s.sig, s.photo || ''], () => { toast('Signature saved on receipt ' + id, true); lsrLoad(); rc(id); }),
     () => { $('rcM').style.display = 'flex'; });
 }
 function tDraw(){

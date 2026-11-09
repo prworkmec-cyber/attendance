@@ -285,7 +285,7 @@ function render(d){
       '<button class="out" ' + (!w.inT || w.outT ? 'disabled' : '') + ' onclick="act(\'checkOut\',' + i + ')">Check Out</button>' +
       '<select ' + (w.inT ? 'disabled' : '') + ' onchange="abs(' + i + ',this)">' +
         '<option value="">' + (w.outT ? 'Checked out' : w.inT ? 'Active' : absent ? esc(LEAVE[w.status] || w.status) : 'Present') + '</option>' + LEAVE_OPTS +
-      '</select><button class="grey" onclick="adv(' + i + ')">+ Advance</button><button class="grey" onclick="noteW(' + i + ')">📝 Note</button>' + (lv ? '' : '<button class="grey" id="lvb' + i + '" onclick="lvT(' + i + ')">▸ Leave</button>') + '</div>' +
+      '</select><button class="grey" onclick="adv(' + i + ')">+ Advance</button>' + (lv ? '' : '<button class="grey" id="lvb' + i + '" onclick="lvT(' + i + ')">▸ Leave</button>') + '<button class="grey" style="margin-left:auto" onclick="noteW(' + i + ')">📝 Note</button></div>' +
       (lv ? '' : '<div class="lvp" id="lvp' + i + '"><button class="grey" onclick="vac(' + i + ',\'AV\')">✈ Annual vacation</button><button class="grey" onclick="vac(' + i + ',\'EL\')">Emergency leave</button></div>') +
       (times || w.notes ? '<div class="times">' + times + (w.notes ? (times ? '<br>' : '') + '📝 ' + esc(w.notes) : '') + '</div>' : '') + '</div>';
   }).join('');

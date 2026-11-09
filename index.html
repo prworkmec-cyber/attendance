@@ -597,9 +597,18 @@ function rc(id){
     const row = (k, v) => '<tr><td>' + k + '</td><td><b>' + esc(v) + '</b></td></tr>';
     $('rcT').innerHTML = row('Worker', r.name) + row('Amount', aed(r.amt)) + row('Paid on', niceD(r.ds) + ' ' + r.ds.slice(0, 4)) +
       row('Received by', r.by || '—') + row('Entered by', r.ent) + row('Recorded', r.at) + row('Receipt no.', r.id);
-    $('rcSig').innerHTML = r.sig ? '<img src="' + r.sig + '" alt="signature" style="max-width:100%">' : '<span class="due">No signature</span>';
+    $('rcSig').innerHTML = r.sig ? '<img src="' + r.sig + '" alt="signature" style="max-width:100%">' :
+      '<div style="text-align:center;padding:8px"><span class="due">No signature</span><br><button class="pri" style="margin-top:8px" onclick="rcSign(\'' + esc(r.id) + '\')">✍ Take signature now</button></div>';
+    window._rc = r;
     $('rcM').style.display = 'flex';
   });
+}
+/** Add a signature later to a payment recorded without one. */
+function rcSign(id){
+  const r = window._rc; $('rcM').style.display = 'none';
+  sign({ text: 'Leave salary ' + aed(r.amt) + ' paid to ' + r.name + ' on ' + niceD(r.ds) + ' ' + r.ds.slice(0, 4) + ' (receipt ' + r.id + ').', worker: r.name },
+    s => call('signLsReceipt', [PIN, id, s.by, s.sig], () => { toast('Signature saved on receipt ' + id, true); lsrLoad(); rc(id); }),
+    () => { $('rcM').style.display = 'flex'; });
 }
 function tDraw(){
   const sh = $('tShift').value, rows = (window._staff || []).filter(r => r.active && r.shift === sh);

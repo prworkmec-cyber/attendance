@@ -54,6 +54,7 @@
   #rcM{z-index:55} #rcM td{padding:4px 6px;vertical-align:top} #rcM td:first-child{color:var(--muted);white-space:nowrap}
   .tabs{display:flex;flex-wrap:wrap;gap:6px;position:sticky;top:0;z-index:5;background:var(--bg);padding:8px 0;margin-bottom:4px}
   .tabs button{flex:1 1 30%;background:#E5E7EB;color:#1F2937;padding:10px 6px;font-size:14px}
+  .sm{font-size:14px !important;padding:8px 9px !important}
   .lvp{display:none;width:100%;gap:6px;margin-top:6px} .lvp.open{display:flex} .lvp button{flex:1}
   .tabs button.on{background:var(--blue);color:#fff}
   #sigM{z-index:60} #sigM label{display:block;padding:5px 0} #modal h3.warnh{color:var(--red)}
@@ -107,6 +108,7 @@
     <div class="card" data-pg="att"><div class="row">
       <button id="swOne" class="grey" style="flex:1" onclick="attMode('one')">▸ One worker</button>
       <button id="swBulk" class="grey" style="flex:1" onclick="attMode('bulk')">▸ Whole shift (bulk)</button>
+      <button id="swPen" class="grey" style="flex:1" onclick="attMode('pen')">▸ Penalty</button>
     </div></div>
     <div class="card" data-pg="att" id="attOne">
       <b>Admin attendance – add / correct (no location check)</b>
@@ -120,6 +122,18 @@
       <div id="aCur" class="hint"></div>
       <input id="aNote" placeholder="Note – why (required)" style="width:100%;margin-top:8px">
       <button class="pri" style="width:100%;margin-top:8px" onclick="aSave()">Save</button>
+    </div>
+    <div class="card" data-pg="att" id="attPen">
+      <b>⏱ Penalty – deduct hours from basic hours</b>
+      <div class="hint">Taken off the worker's normal hours for that day, never off OT. The reason is saved as a note on the Penalty cell in the Daily Log.</div>
+      <select id="pnWorker" style="width:100%;margin-top:8px" onchange="pnLoad()"></select>
+      <div class="row" style="margin-top:8px">
+        <input id="pnDate" type="date" style="flex:1" onchange="pnLoad()">
+        <select id="pnHrs" style="flex:1"><option value="0.5">30 minutes</option><option value="1" selected>1 hour</option><option value="1.5">1½ hours</option><option value="2">2 hours</option><option value="3">3 hours</option><option value="4">4 hours</option></select>
+      </div>
+      <div id="pnCur" class="hint"></div>
+      <input id="pnReason" placeholder="Reason (required)" style="width:100%;margin-top:8px">
+      <div class="row" style="margin-top:8px"><button class="out" style="flex:2" onclick="pnSave()">Deduct</button><button class="grey" style="flex:1" onclick="pnDel()">Remove</button></div>
     </div>
     <div class="card" data-pg="ls">
       <b>Leave salary (annual vacation / emergency leave)</b>
@@ -182,6 +196,9 @@
     <textarea id="mNote" rows="2" maxlength="300" placeholder="Note / more details" style="width:100%;font-size:15px;padding:8px;border-radius:8px;border:1px solid var(--line);font-family:inherit;margin-bottom:6px"></textarea>
   </div>
   <div id="mVac" style="display:none;margin:8px 0"><b>Vacation starts on</b><br><input id="mVacFrom" type="date" style="width:100%;margin-top:6px"></div>
+  <div id="mPen" style="display:none;margin:8px 0"><b>Hours to deduct (from basic hours)</b><br>
+    <select id="mPenH" style="width:100%;margin-top:6px"><option value="0.5">30 minutes</option><option value="1" selected>1 hour</option><option value="1.5">1½ hours</option><option value="2">2 hours</option><option value="3">3 hours</option><option value="4">4 hours</option></select>
+  </div>
   <div id="mTxtD" style="display:none;margin:8px 0"><textarea id="mTxt" rows="3" maxlength="300" style="width:100%;font-size:15px;padding:8px;border-radius:8px;border:1px solid var(--line);font-family:inherit"></textarea></div>
   <div id="mDays" style="display:none;margin:8px 0"><b>How many days?</b><br>
     <input id="mDaysIn" type="number" min="1" max="365" inputmode="numeric" placeholder="Number of days" style="width:100%;margin-top:6px">
@@ -307,7 +324,8 @@ function render(d){
     const lsTxt = lv && lv.ls ? ' · Leave salary: ' + (/^PAID/.test(lv.ls) ? '<b style="color:#2E7D32">' + esc(lv.ls) + '</b>' + (lv.by ? ' (received by ' + esc(lv.by) + (lv.signed ? ', signed ✍' : '') + ')' : '') : '<b class="due">' + esc(lv.ls) + '</b>') : '';
     const pl = w.planned, plTxt = !pl ? '' : '<b style="color:#B26A00">' + (pl.code === 'EL' ? 'Emergency leave' : '✈ Annual vacation') + ' from ' + esc(niceD(pl.from)) + ' – ' + pl.days + ' days</b>' + (pl.ls ? ' · Leave salary: ' + (/^PAID/.test(pl.ls) ? '<b style="color:#2E7D32">' + esc(pl.ls) + '</b>' + (pl.by ? ' (received by ' + esc(pl.by) + (pl.signed ? ', signed ✍' : '') + ')' : '') : '<b class="due">' + esc(pl.ls) + '</b>') : '');
     const times = (plTxt ? plTxt + (lvTxt || w.inT || w.by ? ' · ' : '') : '') + (lvTxt ? lvTxt + lsTxt + (w.inT || w.by ? ' · ' : '') : '') + (w.adv ? '<b style="color:#C62828">Advance ' + esc(w.adv) + ' AED</b>' + (w.inT || w.by ? ' · ' : '') : '') + (w.inT ? 'In ' + esc(w.inT) : '') + (w.by ? (w.inT ? ' · ' : '') + 'by ' + esc(w.by) : '') + (w.outT ? ' · Out ' + esc(w.outT) + ' · OT ' + esc(w.ot) + 'h' : '') +
-                  (w.flags ? ' · <span class="flag">' + esc(w.flags) + '</span>' : '');
+                  (w.flags ? ' · <span class="flag">' + esc(w.flags) + '</span>' : '') +
+                  (w.pen ? ' · <b style="color:#C62828">⏱ Penalty −' + esc(w.pen) + ' h</b> <a href="#" onclick="penDel(' + i + ');return false" style="color:#C62828">remove</a>' : '');
     const locked = !w.inT && (lv || absent);   // on any leave: never ticked by Select all, only his own Check In brings him back
     return '<div class="card' + (locked ? ' onleave' : '') + '"><div class="row">' +
       '<input type="checkbox" class="chk" data-i="' + i + '" onchange="updBulk()"' + (locked ? ' disabled title="On leave – use Check In"' : '') + '>' +
@@ -316,7 +334,7 @@ function render(d){
       '<button class="out" ' + (!w.inT || w.outT ? 'disabled' : '') + ' onclick="act(\'checkOut\',' + i + ')">Check Out</button>' +
       '<select ' + (w.inT ? 'disabled' : '') + ' onchange="abs(' + i + ',this)">' +
         '<option value="">' + (w.outT ? 'Checked out' : w.inT ? 'Active' : absent ? esc(LEAVE[w.status] || w.status) : 'Present') + '</option>' + LEAVE_OPTS +
-      '</select><button class="grey" onclick="adv(' + i + ')">+ Advance</button>' + (lv ? '' : '<button class="grey" id="lvb' + i + '" onclick="lvT(' + i + ')">▸ Leave</button>') + '<button class="grey" style="margin-left:auto" onclick="noteW(' + i + ')">📝 Note</button></div>' +
+      '</select><button class="grey sm" onclick="adv(' + i + ')">+ Advance</button>' + (lv ? '' : '<button class="grey sm" id="lvb' + i + '" onclick="lvT(' + i + ')">▸ Leave</button>') + '<button class="grey sm" style="margin-left:auto" onclick="penW(' + i + ')">⏱ Penalty</button><button class="grey sm" onclick="noteW(' + i + ')">📝 Note</button></div>' +
       (lv ? '' : '<div class="lvp" id="lvp' + i + '"><button class="grey" onclick="vac(' + i + ',\'AV\')">✈ Annual vacation</button><button class="grey" onclick="vac(' + i + ',\'EL\')">Emergency leave</button></div>') +
       (times || w.notes ? '<div class="times">' + times + (w.notes ? (times ? '<br>' : '') + '📝 ' + esc(w.notes) : '') + '</div>' : '') + '</div>';
   }).join('');
@@ -341,6 +359,7 @@ function ask(o, onYes, onNo){
   $('mDays').style.display = o.days ? '' : 'none'; $('mDaysIn').value = '';
   $('mLs').style.display = o.ls ? '' : 'none'; $('mLsChk').checked = false; $('mLsAmt').value = ''; $('mLsAmt').style.display = 'none';
   $('mAdv').style.display = o.adv ? '' : 'none'; if (o.adv) { $('mAdvDate').value = o.adv; $('mAdvAmt').value = ''; $('mAdvNote').value = ''; }
+  $('mPen').style.display = o.pen ? '' : 'none'; $('mPenH').value = '1';
   $('mBrk').style.display = o.brk ? '' : 'none'; document.querySelectorAll('input[name=brk]').forEach(r => r.checked = false);
   $('mNames').textContent = o.names && o.names.length ? o.names.join(' · ') : '';
   $('mYes').textContent = o.yes || 'Yes'; $('mYes').className = o.warn ? 'out' : 'pri';
@@ -360,9 +379,10 @@ function ask(o, onYes, onNo){
     }
     if (o.txt) {
       const t = $('mTxt').value.trim();
-      if (o.txtReq && !t) { toast('Write the note', false); return; }
+      if (o.txtReq && !t) { toast(o.txtMsg || 'Write the note', false); return; }
       f = Object.assign(f || {}, { txt: t });
     }
+    if (o.pen) f = Object.assign(f || {}, { pen: Number($('mPenH').value) });
     if (o.vac) {
       if (!$('mVacFrom').value) { toast('Pick the date the vacation starts', false); return; }
       f = Object.assign(f || {}, { from: $('mVacFrom').value });
@@ -447,6 +467,18 @@ function act(fn, i){
 }
 /** "▸ Leave" on a worker card: open / close the booking options. */
 function lvT(i){ const p = $('lvp' + i), b = $('lvb' + i), open = !p.classList.contains('open'); p.classList.toggle('open', open); b.textContent = (open ? '▾' : '▸') + ' Leave'; }
+/** Penalty – hours off his basic hours today (reason kept as a cell note in the Daily Log). */
+function penW(i){
+  const w = window._list[i];
+  ask({ title: '⏱ Penalty – deduct hours', names: [w.name], yes: 'Deduct', warn: true, pen: true, txt: 'Reason (required) – e.g. extra break', txtReq: true, txtMsg: 'Write the reason',
+        en: 'The hours are taken off his basic hours for today (never off OT). Saved with your name and the time.' },
+    f => call('addPenalty', [PIN, w.name, '', f.pen, f.txt], d => { render(d); toast(w.name + ': −' + f.pen + ' h penalty', true); }));
+}
+function penDel(i){
+  const w = window._list[i];
+  ask({ title: 'Remove penalty', names: [w.name], yes: 'Remove', txt: 'Reason (optional)', en: 'Remove the ' + w.pen + ' h penalty for today? The removal is recorded.' },
+    f => call('removePenalty', [PIN, w.name, '', f.txt || ''], d => { render(d); toast(w.name + ': penalty removed', true); }));
+}
 /** Quick note – added to today's Daily Log row as a fixed record. */
 function noteW(i){
   const w = window._list[i];
@@ -633,11 +665,32 @@ function pg(p){
 let ATT = '';
 function attMode(m){ ATT = ATT === m ? '' : m; attShow(); }
 function attShow(){
-  [['one', 'attOne', 'swOne', 'One worker'], ['bulk', 'attBulk', 'swBulk', 'Whole shift (bulk)']].forEach(([m, card, btn, txt]) => {
+  if (ATT === 'pen' && !$('pnDate').value) $('pnDate').value = dubaiNow().toISOString().slice(0, 10);
+  [['one', 'attOne', 'swOne', 'One worker'], ['bulk', 'attBulk', 'swBulk', 'Whole shift (bulk)'], ['pen', 'attPen', 'swPen', 'Penalty']].forEach(([m, card, btn, txt]) => {
     $(card).style.display = ATT === m ? '' : 'none';
     $(btn).className = ATT === m ? 'pri' : 'grey';
     $(btn).textContent = (ATT === m ? '▾ ' : '▸ ') + txt;
   });
+}
+/* ---- admin penalty ---- */
+function pnLoad(){
+  const name = $('pnWorker').value, ds = $('pnDate').value; $('pnCur').textContent = '';
+  if (!name || !ds) return;
+  call('adminGet', [PIN, name, ds], r => { $('pnCur').textContent = r.found && r.pen ? 'Current penalty: ' + r.pen + ' h' : 'No penalty on this day.'; });
+}
+function pnSave(){
+  const name = $('pnWorker').value, ds = $('pnDate').value, h = Number($('pnHrs').value), why = $('pnReason').value.trim();
+  if (!name) { toast('Select a worker', false); return; }
+  if (!ds) { toast('Pick a date', false); return; }
+  if (!why) { toast('Write the reason', false); return; }
+  ask({ title: '⏱ Penalty', names: [name], yes: 'Deduct', warn: true, en: 'Deduct ' + h + ' h from ' + name + "'s basic hours on " + niceD(ds) + '?\nReason: ' + why },
+    () => call('addPenalty', [PIN, name, ds, h, why], m => { toast(m, true); $('pnReason').value = ''; pnLoad(); }));
+}
+function pnDel(){
+  const name = $('pnWorker').value, ds = $('pnDate').value, why = $('pnReason').value.trim();
+  if (!name || !ds) { toast('Select a worker and date', false); return; }
+  ask({ title: 'Remove penalty', names: [name], yes: 'Remove', en: 'Remove the penalty on ' + niceD(ds) + '? The removal is recorded' + (why ? ' with the reason: ' + why : '') + '.' },
+    () => call('removePenalty', [PIN, name, ds, why], m => { toast(m, true); $('pnReason').value = ''; pnLoad(); }));
 }
 /* ---- leave salary payments & receipts ---- */
 function lsrLoad(){ call('listLeaveSalary', [PIN], l => { window._lsr = l; lsrDraw(); }); }
@@ -754,7 +807,7 @@ function drawStaff(rows){
   if (!$('tDate').value) $('tDate').value = $('aDate').value;
   tDraw(); lsDraw();
   const opts = '<option value="">— Select worker —</option>' + rows.filter(r => r.active).map(r => '<option value="' + esc(r.name) + '">' + esc(r.name) + ' (' + r.shift + ')</option>').join('');
-  ['vWorker', 'lWorker', 'pvWorker'].forEach(id => { const k = $(id).value; $(id).innerHTML = opts; $(id).value = k; });
+  ['vWorker', 'lWorker', 'pvWorker', 'pnWorker'].forEach(id => { const k = $(id).value; $(id).innerHTML = opts; $(id).value = k; });
   if (!$('vDate').value) $('vDate').value = $('aDate').value;
   if (!$('lDate').value) $('lDate').value = $('aDate').value;
   if (!window._advLoaded) { window._advLoaded = 1; vLoad(); lLoad(); }

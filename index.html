@@ -101,7 +101,11 @@
         <button class="pri" onclick="addW()">Add</button>
       </div>
     </div>
-    <div class="card" data-pg="att">
+    <div class="card" data-pg="att"><div class="row">
+      <button id="swOne" class="grey" style="flex:1" onclick="attMode('one')">▸ One worker</button>
+      <button id="swBulk" class="grey" style="flex:1" onclick="attMode('bulk')">▸ Whole shift (bulk)</button>
+    </div></div>
+    <div class="card" data-pg="att" id="attOne">
       <b>Admin attendance – add / correct (no location check)</b>
       <div class="hint">For outside work, missed punches or disputes. Saved as "Admin" with your note. Night shift: times after midnight (e.g. 04:00) count on the next morning.</div>
       <select id="aWorker" style="width:100%" onchange="aLoad()"></select>
@@ -123,7 +127,7 @@
       <input id="lsrQ" placeholder="Search by name" oninput="lsrDraw()" style="width:100%;margin-top:8px">
       <div id="lsrList" class="hint" style="margin-top:8px">Loading…</div>
     </div>
-    <div class="card" data-pg="att">
+    <div class="card" data-pg="att" id="attBulk">
       <b>Admin – whole shift at once (no location check)</b>
       <div class="hint">Check in / check out the complete team in one go. Untick anyone who was absent. Workers on leave start unticked.</div>
       <div class="row" style="margin-top:8px">
@@ -512,6 +516,17 @@ function pg(p){
   document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.p === p));
   try { localStorage.setItem('admPg', p); } catch (e) {}
   if (p === 'ls') lsrLoad();
+  if (p === 'att') attShow();
+}
+/* attendance page: open one section at a time (tap again to close) */
+let ATT = '';
+function attMode(m){ ATT = ATT === m ? '' : m; attShow(); }
+function attShow(){
+  [['one', 'attOne', 'swOne', 'One worker'], ['bulk', 'attBulk', 'swBulk', 'Whole shift (bulk)']].forEach(([m, card, btn, txt]) => {
+    $(card).style.display = ATT === m ? '' : 'none';
+    $(btn).className = ATT === m ? 'pri' : 'grey';
+    $(btn).textContent = (ATT === m ? '▾ ' : '▸ ') + txt;
+  });
 }
 /* ---- leave salary payments & receipts ---- */
 function lsrLoad(){ call('listLeaveSalary', [PIN], l => { window._lsr = l; lsrDraw(); }); }

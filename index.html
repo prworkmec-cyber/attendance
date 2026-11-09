@@ -111,8 +111,6 @@
         <label style="flex:1">Check out<br><input id="aOut" type="time" style="width:100%"></label>
       </div>
       <div id="aCur" class="hint"></div>
-      <select id="aReason" style="width:100%"><option value="">Early check-out reason (only if under 10 h)</option><option value="SL">Sick</option><option value="PL">Personal (unpaid)</option><option value="OTHER">Other</option></select>
-      <select id="aBrk" style="width:100%;margin-top:8px"><option value="">Sunday lunch break? (Sundays only)</option><option value="Y">Break taken – deduct 1 h</option><option value="N">No break</option></select>
       <input id="aNote" placeholder="Note – why (required)" style="width:100%;margin-top:8px">
       <button class="pri" style="width:100%;margin-top:8px" onclick="aSave()">Save</button>
     </div>
@@ -138,8 +136,6 @@
       </div>
       <label style="display:block;margin:10px 0 4px"><input type="checkbox" id="tAll" onchange="document.querySelectorAll('#tList input').forEach(c => c.checked = this.checked)"> <b>Select all</b></label>
       <div id="tList"></div>
-      <select id="tReason" style="width:100%;margin-top:8px"><option value="">Early check-out reason (only if under 10 h)</option><option value="SL">Sick</option><option value="PL">Personal (unpaid)</option><option value="OTHER">Other</option></select>
-      <select id="tBrk" style="width:100%;margin-top:8px"><option value="">Sunday lunch break? (Sundays only)</option><option value="Y">Break taken – deduct 1 h</option><option value="N">No break</option></select>
       <input id="tNote" placeholder="Note – why (required)" style="width:100%;margin-top:8px">
       <button class="pri" style="width:100%;margin-top:8px" onclick="tSave()">Save for selected workers</button>
     </div>
@@ -227,11 +223,11 @@ setInterval(tick, 1000); tick();
 call('serverNow', [], t => { OFFSET = t - Date.now(); tick(); });
 
 function toast(t, ok){ const m=$('msg'); m.textContent=t; m.style.background= ok? '#2E7D32':'#C62828'; m.style.display='block'; clearTimeout(timer); timer=setTimeout(()=>m.style.display='none', ok ? 3500 : 8000); }
-function call(fn, args, done){
+function call(fn, args, done, onErr){
   BUSY++; document.body.style.cursor = 'progress';
   fetch(API, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ fn: fn, args: args }) })
     .then(r => r.json())
-    .then(r => { if (r.ok) done(r.data); else toast(r.error, false); })
+    .then(r => { if (r.ok) done(r.data); else if (onErr) onErr(r.error); else toast(r.error, false); })
     .catch(() => toast('No internet / server not reachable', false))
     .finally(() => { if (--BUSY <= 0) { BUSY = 0; document.body.style.cursor = ''; } });
 }
@@ -452,10 +448,18 @@ function aSave(){
   if (!ds) { toast('Pick a date', false); return; }
   if (!tin && !tout) { toast('Enter check-in and/or check-out time', false); return; }
   if (!note) { toast('Write a note (why)', false); return; }
-  if (new Date(ds + 'T00:00:00Z').getUTCDay() === 0 && tout && !$('aBrk').value) { toast('Sunday: select if the lunch break was taken', false); return; }
-  ask({ title: 'Admin – save attendance', warn: true, names: [name], yes: 'Save',
+  const sun = new Date(ds + 'T00:00:00Z').getUTCDay() === 0 && !!tout;   // lunch-break question only on Sunday with a check-out
+  ask({ title: 'Admin – save attendance', warn: true, names: [name], yes: 'Save', brk: sun,
         en: name + '\nDate: ' + ds + '\nCheck in: ' + (tin || '(unchanged)') + '\nCheck out: ' + (tout || '(none)') + '\nNote: ' + note },
-    () => call('adminSet', [PIN, name, ds, tin, tout, note, $('aReason').value, note, $('aBrk').value], m => { toast(m, true); $('aNote').value = ''; $('aReason').value = ''; $('aBrk').value = ''; aLoad(); }));
+    f => {
+      const brk = f && f.brk || '';
+      const go = (reason, rnote) => call('adminSet', [PIN, name, ds, tin, tout, note, reason, rnote || note, brk],
+        m => { toast(m, true); $('aNote').value = ''; aLoad(); },
+        err => /early check-out reason/.test(err)   // under 10 h: ask the reason now
+          ? ask({ title: '⚠ Early check-out', warn: true, names: [name], form: true, yes: 'Save', en: err.replace(/ – select.*/, '') + '.\nSelect a reason below.' }, g => go(g.reason, g.note))
+          : toast(err, false));
+      go('', '');
+    });
 }
 function lsDraw(){
   const rows = (window._staff || []).filter(r => r.active && r.leave === 'AV');
@@ -538,13 +542,25 @@ function tSave(){
   if (!ds) { toast('Pick a date', false); return; }
   if (!tin && !tout) { toast('Enter check-in and/or check-out time', false); return; }
   if (!note) { toast('Write a note (why)', false); return; }
-  if (new Date(ds + 'T00:00:00Z').getUTCDay() === 0 && tout && !$('tBrk').value) { toast('Sunday: select if the lunch break was taken', false); return; }
-  ask({ title: 'Admin – ' + $('tShift').value + ' shift (' + names.length + ' workers)', warn: true, names: names, yes: 'Save for all',
+  const sun = new Date(ds + 'T00:00:00Z').getUTCDay() === 0 && !!tout;   // lunch-break question only on Sunday with a check-out
+  ask({ title: 'Admin – ' + $('tShift').value + ' shift (' + names.length + ' workers)', warn: true, names: names, yes: 'Save for all', brk: sun,
         en: 'Date: ' + ds + '\nCheck in: ' + (tin || '(unchanged)') + '\nCheck out: ' + (tout || '(none)') + '\nNote: ' + note },
-    () => call('adminSetMany', [PIN, names, ds, tin, tout, note, $('tReason').value, note, $('tBrk').value], r => {
-      toast(r.ok + ' worker(s) saved' + (r.errors.length ? ' · NOT saved: ' + r.errors.join(' | ') : ''), !r.errors.length);
-      if (!r.errors.length) { $('tNote').value = ''; $('tReason').value = ''; $('tBrk').value = ''; }
-    }));
+    f => {
+      const brk = f && f.brk || '';
+      let saved = 0; const failed = [];
+      const go = (list, reason, rnote) => call('adminSetMany', [PIN, list, ds, tin, tout, note, reason, rnote || note, brk], r => {
+        saved += r.ok;
+        const early = r.errors.filter(e => /early check-out reason/.test(e)); failed.push(...r.errors.filter(e => !/early check-out reason/.test(e)));
+        if (early.length && !reason)   // under 10 h: ask the reason once for these workers
+          return ask({ title: '⚠ Early check-out', warn: true, names: early.map(e => e.split(': ')[0]), form: true, yes: 'Save',
+                       en: early.map(e => e.split(': ')[1].replace(/ – select.*/, '')).join('\n') + '\nSelect a reason below.' },
+            g => go(early.map(e => e.split(': ')[0]), g.reason, g.note));
+        failed.push(...early);
+        toast(saved + ' worker(s) saved' + (failed.length ? ' · NOT saved: ' + failed.join(' | ') : ''), !failed.length);
+        if (!failed.length) $('tNote').value = '';
+      });
+      go(names, '', '');
+    });
 }
 /* ---- admin: advances & loans ---- */
 const aed = n => Number(n).toLocaleString('en-US', { maximumFractionDigits: 2 }) + ' AED';

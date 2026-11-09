@@ -53,6 +53,7 @@
   #rcM{z-index:55} #rcM td{padding:4px 6px;vertical-align:top} #rcM td:first-child{color:var(--muted);white-space:nowrap}
   .tabs{display:flex;flex-wrap:wrap;gap:6px;position:sticky;top:0;z-index:5;background:var(--bg);padding:8px 0;margin-bottom:4px}
   .tabs button{flex:1 1 30%;background:#E5E7EB;color:#1F2937;padding:10px 6px;font-size:14px}
+  .lvp{display:none;width:100%;gap:6px;margin-top:6px} .lvp.open{display:flex} .lvp button{flex:1}
   .tabs button.on{background:var(--blue);color:#fff}
   #sigM{z-index:60} #sigM label{display:block;padding:5px 0} #modal h3.warnh{color:var(--red)}
   #mEn{font-size:15px;line-height:1.5}
@@ -119,13 +120,13 @@
       <button class="pri" style="width:100%;margin-top:8px" onclick="aSave()">Save</button>
     </div>
     <div class="card" data-pg="ls">
-      <b>Leave salary (annual vacation)</b>
-      <div id="lsList" class="hint">No worker on annual vacation.</div>
+      <b>Leave salary (annual vacation / emergency leave)</b>
+      <div id="lsList" class="hint">No worker on leave.</div>
     </div>
     <div class="card" data-pg="ls">
-      <b>✈ Book annual vacation</b>
+      <b>Book leave in advance</b>
       <select id="pvWorker" style="width:100%;margin-top:8px"></select>
-      <button class="pri" style="width:100%;margin-top:8px" onclick="pvOpen()">Book vacation…</button>
+      <div class="row" style="margin-top:8px"><button class="pri" style="flex:1" onclick="pvOpen('AV')">✈ Annual vacation…</button><button class="pri" style="flex:1" onclick="pvOpen('EL')">Emergency leave…</button></div>
     </div>
     <div class="card" data-pg="ls">
       <b>Leave salary payments &amp; receipts</b>
@@ -179,6 +180,7 @@
     <textarea id="mNote" rows="2" maxlength="300" placeholder="Note / more details" style="width:100%;font-size:15px;padding:8px;border-radius:8px;border:1px solid var(--line);font-family:inherit;margin-bottom:6px"></textarea>
   </div>
   <div id="mVac" style="display:none;margin:8px 0"><b>Vacation starts on</b><br><input id="mVacFrom" type="date" style="width:100%;margin-top:6px"></div>
+  <div id="mTxtD" style="display:none;margin:8px 0"><textarea id="mTxt" rows="3" maxlength="300" style="width:100%;font-size:15px;padding:8px;border-radius:8px;border:1px solid var(--line);font-family:inherit"></textarea></div>
   <div id="mDays" style="display:none;margin:8px 0"><b>How many days?</b><br>
     <input id="mDaysIn" type="number" min="1" max="365" inputmode="numeric" placeholder="Number of days" style="width:100%;margin-top:6px">
     <div id="mLs" style="display:none;margin-top:10px">
@@ -272,7 +274,7 @@ function render(d){
        : lv.left === 0 ? '<span class="due">Due back today (' + niceD(lv.ret) + ')</span>'
                                         : '<span class="due">Return date passed (' + niceD(lv.ret) + ') – not back yet</span>';
     const lsTxt = lv && lv.ls ? ' · Leave salary: ' + (/^PAID/.test(lv.ls) ? '<b style="color:#2E7D32">' + esc(lv.ls) + '</b>' + (lv.by ? ' (received by ' + esc(lv.by) + (lv.signed ? ', signed ✍' : '') + ')' : '') : '<b class="due">' + esc(lv.ls) + '</b>') : '';
-    const pl = w.planned, plTxt = !pl ? '' : '<b style="color:#B26A00">✈ Annual vacation from ' + esc(niceD(pl.from)) + ' – ' + pl.days + ' days</b>' + (pl.ls ? ' · Leave salary: ' + (/^PAID/.test(pl.ls) ? '<b style="color:#2E7D32">' + esc(pl.ls) + '</b>' + (pl.by ? ' (received by ' + esc(pl.by) + (pl.signed ? ', signed ✍' : '') + ')' : '') : '<b class="due">' + esc(pl.ls) + '</b>') : '');
+    const pl = w.planned, plTxt = !pl ? '' : '<b style="color:#B26A00">' + (pl.code === 'EL' ? 'Emergency leave' : '✈ Annual vacation') + ' from ' + esc(niceD(pl.from)) + ' – ' + pl.days + ' days</b>' + (pl.ls ? ' · Leave salary: ' + (/^PAID/.test(pl.ls) ? '<b style="color:#2E7D32">' + esc(pl.ls) + '</b>' + (pl.by ? ' (received by ' + esc(pl.by) + (pl.signed ? ', signed ✍' : '') + ')' : '') : '<b class="due">' + esc(pl.ls) + '</b>') : '');
     const times = (plTxt ? plTxt + (lvTxt || w.inT || w.by ? ' · ' : '') : '') + (lvTxt ? lvTxt + lsTxt + (w.inT || w.by ? ' · ' : '') : '') + (w.adv ? '<b style="color:#C62828">Advance ' + esc(w.adv) + ' AED</b>' + (w.inT || w.by ? ' · ' : '') : '') + (w.inT ? 'In ' + esc(w.inT) : '') + (w.by ? (w.inT ? ' · ' : '') + 'by ' + esc(w.by) : '') + (w.outT ? ' · Out ' + esc(w.outT) + ' · OT ' + esc(w.ot) + 'h' : '') +
                   (w.flags ? ' · <span class="flag">' + esc(w.flags) + '</span>' : '');
     const locked = !w.inT && (lv || absent);   // on any leave: never ticked by Select all, only his own Check In brings him back
@@ -283,7 +285,9 @@ function render(d){
       '<button class="out" ' + (!w.inT || w.outT ? 'disabled' : '') + ' onclick="act(\'checkOut\',' + i + ')">Check Out</button>' +
       '<select ' + (w.inT ? 'disabled' : '') + ' onchange="abs(' + i + ',this)">' +
         '<option value="">' + (w.outT ? 'Checked out' : w.inT ? 'Active' : absent ? esc(LEAVE[w.status] || w.status) : 'Present') + '</option>' + LEAVE_OPTS +
-      '</select><button class="grey" onclick="adv(' + i + ')">+ Advance</button>' + (lv ? '' : '<button class="grey" onclick="vac(' + i + ')">✈ Vacation</button>') + '</div>' + (times ? '<div class="times">' + times + '</div>' : '') + '</div>';
+      '</select><button class="grey" onclick="adv(' + i + ')">+ Advance</button><button class="grey" onclick="noteW(' + i + ')">📝 Note</button>' + (lv ? '' : '<button class="grey" id="lvb' + i + '" onclick="lvT(' + i + ')">▸ Leave</button>') + '</div>' +
+      (lv ? '' : '<div class="lvp" id="lvp' + i + '"><button class="grey" onclick="vac(' + i + ',\'AV\')">✈ Annual vacation</button><button class="grey" onclick="vac(' + i + ',\'EL\')">Emergency leave</button></div>') +
+      (times || w.notes ? '<div class="times">' + times + (w.notes ? (times ? '<br>' : '') + '📝 ' + esc(w.notes) : '') + '</div>' : '') + '</div>';
   }).join('');
   window._list = d.list; window._date = d.date;
   $('all').checked = false; updBulk();
@@ -302,6 +306,7 @@ function ask(o, onYes, onNo){
   $('mForm').style.display = o.form ? '' : 'none';
   if (o.form) { $('mReason').value = ''; $('mNote').value = ''; }
   $('mVac').style.display = o.vac ? '' : 'none'; if (o.vac) $('mVacFrom').value = o.vac;
+  $('mTxtD').style.display = o.txt ? '' : 'none'; $('mTxt').value = ''; $('mTxt').placeholder = o.txt || '';
   $('mDays').style.display = o.days ? '' : 'none'; $('mDaysIn').value = '';
   $('mLs').style.display = o.ls ? '' : 'none'; $('mLsChk').checked = false; $('mLsAmt').value = ''; $('mLsAmt').style.display = 'none';
   $('mAdv').style.display = o.adv ? '' : 'none'; if (o.adv) { $('mAdvDate').value = o.adv; $('mAdvAmt').value = ''; $('mAdvNote').value = ''; }
@@ -321,6 +326,11 @@ function ask(o, onYes, onNo){
       if (!$('mAdvDate').value) { toast('Pick a date', false); return; }
       if (!(a > 0)) { toast('Enter the advance amount', false); return; }
       f = { ds: $('mAdvDate').value, amt: a, note: $('mAdvNote').value.trim() };
+    }
+    if (o.txt) {
+      const t = $('mTxt').value.trim();
+      if (o.txtReq && !t) { toast('Write the note', false); return; }
+      f = Object.assign(f || {}, { txt: t });
     }
     if (o.vac) {
       if (!$('mVacFrom').value) { toast('Pick the date the vacation starts', false); return; }
@@ -404,13 +414,22 @@ function act(fn, i){
     call('checkOutPreview', [PIN, w.name, [w.name]], p => ask(outMsg(p, [w.name]), f => go(loc, f)));
   });
 }
-/** Book annual vacation in advance (works while the worker is checked in – e.g. his last working day). */
-function vac(i){
+/** "▸ Leave" on a worker card: open / close the booking options. */
+function lvT(i){ const p = $('lvp' + i), b = $('lvb' + i), open = !p.classList.contains('open'); p.classList.toggle('open', open); b.textContent = (open ? '▾' : '▸') + ' Leave'; }
+/** Quick note – added to today's Daily Log row as a fixed record. */
+function noteW(i){
+  const w = window._list[i];
+  ask({ title: '📝 Note', names: [w.name], yes: 'Save note', txt: 'Note about ' + w.name, txtReq: true, en: 'The note is added to today\'s Daily Log with the time and your name. It cannot be changed later.' },
+    f => call('addNote', [PIN, w.name, f.txt], d => { render(d); toast('Note saved', true); }));
+}
+/** Book annual vacation / emergency leave in advance (works while the worker is checked in – e.g. his last working day). */
+function vac(i, code){
   const w = window._list[i], tomorrow = new Date(new Date((window._date || dubaiNow().toISOString().slice(0, 10)) + 'T00:00:00Z').getTime() + 86400000).toISOString().slice(0, 10);
-  ask({ title: '✈ Annual vacation', names: [w.name], yes: 'Book vacation', vac: w.planned ? w.planned.from : tomorrow, days: true, ls: true,
-        en: 'Book annual vacation for ' + w.name + '. Today he works normally; from the start date he is marked on vacation every day until you check him in.' },
+  const nm = code === 'EL' ? 'Emergency leave' : 'Annual vacation';
+  ask({ title: (code === 'EL' ? '' : '✈ ') + nm, names: [w.name], yes: 'Book ' + nm.toLowerCase(), vac: w.planned && w.planned.code === code ? w.planned.from : tomorrow, days: true, ls: true, txt: 'Reason / note (optional)',
+        en: 'Book ' + nm.toLowerCase() + ' for ' + w.name + '. Today he works normally; from the start date he is marked on leave every day until you check him in.' },
     f => {
-      const go = s => call('planVacation', [PIN, w.name, f.from, f.days, !!f.lsPaid, f.lsAmt || '', s ? s.by : '', s ? s.sig : ''], d => { render(d); toast(w.name + ': vacation from ' + niceD(f.from) + ' for ' + f.days + ' days', true); });
+      const go = s => call('planVacation', [PIN, w.name, f.from, f.days, !!f.lsPaid, f.lsAmt || '', s ? s.by : '', s ? s.sig : '', code, f.txt || ''], d => { render(d); toast(w.name + ': ' + nm.toLowerCase() + ' from ' + niceD(f.from) + ' for ' + f.days + ' days', true); });
       if (f.lsPaid) sign({ worker: w.name, text: 'Leave salary of ' + aed(f.lsAmt) + ' for ' + w.name + ', paid on ' + niceD(window._date || dubaiNow().toISOString().slice(0, 10)) + '.' }, go);
       else go();
     });
@@ -424,7 +443,7 @@ function adv(i){
 function abs(i, sel){
   const w = window._list[i], code = sel.value; if (!code) return;
   const long = LONG.indexOf(code) >= 0;
-  ask({ title: 'Leave', names: [w.name], yes: 'Mark leave', days: long, ls: code === 'AV',
+  ask({ title: 'Leave', names: [w.name], yes: 'Mark leave', days: long, ls: code === 'AV' || code === 'EL',
         en: 'Mark ' + w.name + ' as ' + LEAVE[code] + '?' + (long ? '\nHe will stay at the top of the list, marked on leave every day, until you check him in.' : '') },
     f => {
       const go = s => call('markAbsent', [PIN, w.name, code].concat(long ? [f.days, !!f.lsPaid, f.lsAmt || '', s ? s.by : '', s ? s.sig : ''] : []), d => { render(d); toast(w.name + ' marked ' + LEAVE[code] + (long ? ' for ' + f.days + ' days' : ''), true); });
@@ -489,19 +508,19 @@ function aSave(){
     });
 }
 function lsDraw(){
-  const rows = (window._staff || []).filter(r => r.active && r.leave === 'AV');
-  $('lsList').innerHTML = !rows.length ? 'No worker on annual vacation.' : rows.map(r =>
-    '<div style="padding:6px 0;border-bottom:1px solid var(--line)"><b>' + esc(r.name) + '</b> · ' + esc(niceD(r.leaveFrom)) + ' → back ' + esc(niceD(r.leaveRet)) + (r.leaveFrom > dubaiNow().toISOString().slice(0, 10) ? ' · <b style="color:#B26A00">not started yet</b> <button class="out" onclick="pvCancel(\'' + esc(r.name) + '\')">Cancel vacation</button>' : '') + ' · ' +
+  const rows = (window._staff || []).filter(r => r.active && (r.leave === 'AV' || r.leave === 'EL'));
+  $('lsList').innerHTML = !rows.length ? 'No worker on leave.' : rows.map(r =>
+    '<div style="padding:6px 0;border-bottom:1px solid var(--line)"><b>' + esc(r.name) + '</b> · ' + (r.leave === 'EL' ? 'Emergency leave' : 'Annual vacation') + ' · ' + esc(niceD(r.leaveFrom)) + ' → back ' + esc(niceD(r.leaveRet)) + (r.leaveFrom > dubaiNow().toISOString().slice(0, 10) ? ' · <b style="color:#B26A00">not started yet</b> <button class="out" onclick="pvCancel(\'' + esc(r.name) + '\')">Cancel vacation</button>' : '') + ' · ' +
     (/^PAID/.test(r.ls) ? '<b style="color:#2E7D32">' + esc(r.ls) + '</b>' + (r.lsBy ? ' · received by ' + esc(r.lsBy) : '') + (/^Signed/.test(r.lsSig) ? ' · signed ✍' : ' · no signature') : '<b class="due">' + esc(r.ls || 'NOT PAID') + '</b>') +
     '<div class="row" style="margin-top:6px"><input type="number" min="1" step="any" inputmode="decimal" id="ls_' + esc(r.name).replace(/\W/g, '_') + '" placeholder="Amount paid (AED)" style="flex:1">' +
     '<button class="pri" onclick="lsSave(\'' + esc(r.name) + '\')">Mark paid</button></div></div>').join('');
 }
-function pvOpen(){
+function pvOpen(code){
   const name = $('pvWorker').value; if (!name) { toast('Select a worker', false); return; }
-  const tomorrow = new Date(dubaiNow().getTime() + 86400000).toISOString().slice(0, 10);
-  ask({ title: '✈ Annual vacation', names: [name], yes: 'Book vacation', vac: tomorrow, days: true, ls: true, en: 'Book annual vacation for ' + name + '.' },
+  const tomorrow = new Date(dubaiNow().getTime() + 86400000).toISOString().slice(0, 10), nm = code === 'EL' ? 'Emergency leave' : 'Annual vacation';
+  ask({ title: nm, names: [name], yes: 'Book ' + nm.toLowerCase(), vac: tomorrow, days: true, ls: true, txt: 'Reason / note (optional)', en: 'Book ' + nm.toLowerCase() + ' for ' + name + '.' },
     f => {
-      const go = s => call('planVacation', [PIN, name, f.from, f.days, !!f.lsPaid, f.lsAmt || '', s ? s.by : '', s ? s.sig : ''], rows => { toast(name + ': vacation booked', true); drawStaff(rows); lsrLoad(); });
+      const go = s => call('planVacation', [PIN, name, f.from, f.days, !!f.lsPaid, f.lsAmt || '', s ? s.by : '', s ? s.sig : '', code, f.txt || ''], rows => { toast(name + ': vacation booked', true); drawStaff(rows); lsrLoad(); });
       if (f.lsPaid) sign({ worker: name, optional: true, text: 'Leave salary of ' + aed(f.lsAmt) + ' for ' + name + ', paid on ' + niceD(dubaiNow().toISOString().slice(0, 10)) + '.' }, go);
       else go();
     });

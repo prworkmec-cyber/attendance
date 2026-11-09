@@ -14,7 +14,8 @@
   :root{--blue:#1F4E78;--bg:#F4F6F9;--card:#fff;--line:#E1E5EB;--green:#2E7D32;--red:#C62828;--amber:#B26A00;--muted:#6B7280}
   *{box-sizing:border-box}
   body{margin:0;font-family:Arial,Helvetica,sans-serif;background:var(--bg);color:#1F2937}
-  header{background:var(--blue);color:#fff;padding:14px 16px}
+  header{background:var(--blue);color:#fff;padding:14px 16px;position:relative}
+  #lo{position:absolute;top:12px;right:12px;background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.5);border-radius:8px;padding:6px 12px;font-size:14px}
   header h1{margin:0;font-size:18px}
   header .sub{font-size:13px;opacity:.85;margin-top:4px}
   #clock{font-size:30px;font-weight:bold;letter-spacing:1px;margin-top:6px}
@@ -68,6 +69,7 @@
 <body>
 <header>
   <h1>WORKMEC Attendance</h1>
+  <button id="lo" class="hidden" onclick="logout()">Log out</button>
   <div class="sub" id="hdr">Enter your password</div>
   <div id="clock">--:--:--</div>
   <div id="today" class="sub" style="font-size:15px;opacity:1"></div>
@@ -244,15 +246,40 @@ function call(fn, args, done, onErr){
     .finally(() => { if (--BUSY <= 0) { BUSY = 0; document.body.style.cursor = ''; } });
 }
 
-function doLogin(){
+/* ---- session: survives an accidental refresh; ends on Log out or after 15 minutes without any tap ---- */
+const IDLE_MS = 15 * 60 * 1000;
+let LAST = Date.now();
+function sesSave(){ try { localStorage.setItem('wmS', JSON.stringify({ p: PIN, t: LAST })); } catch (e) {} }
+function sesClear(){ try { localStorage.removeItem('wmS'); } catch (e) {} }
+function logout(msg){
+  sesClear(); PIN = '';
+  try { if (msg) sessionStorage.setItem('wmMsg', msg); } catch (e) {}
+  location.reload();
+}
+function idleCheck(){ if (PIN && Date.now() - LAST > IDLE_MS) logout('Logged out – no activity for 15 minutes'); }
+['pointerdown', 'keydown', 'touchstart'].forEach(ev => document.addEventListener(ev, () => {
+  if (!PIN) return; idleCheck(); if (!PIN) return;
+  const n = Date.now(); if (n - LAST > 5000) { LAST = n; sesSave(); }
+}, true));
+setInterval(idleCheck, 30000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) idleCheck(); });
+function doLogin(auto){
   PIN = $('pin').value.trim();
   call('login', [PIN], r => {
+    $('pin').value = ''; LAST = Date.now(); sesSave(); $('lo').classList.remove('hidden');
     $('login').classList.add('hidden');
     if (r.role === 'ADMIN') { $('adm').classList.remove('hidden'); $('hdr').textContent = 'Admin'; loadStaff(); let p = 'att'; try { p = localStorage.getItem('admPg') || 'att'; } catch (e) {} pg(p); }
     else { $('sup').classList.remove('hidden'); refresh(); getLoc(() => {}, true); }   // ask location permission early
-  });
+  }, e => { PIN = ''; if (auto) { sesClear(); $('pin').value = ''; } toast(e, false); });
 }
 $('pin').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+(function resume(){
+  let s = null, m = '';
+  try { s = JSON.parse(localStorage.getItem('wmS') || 'null'); m = sessionStorage.getItem('wmMsg') || ''; sessionStorage.removeItem('wmMsg'); } catch (e) {}
+  if (m) $('hdr').textContent = m;
+  if (s && s.p && Date.now() - s.t < IDLE_MS) { $('pin').value = s.p; doLogin(true); }
+  else sesClear();
+})();
 
 function refresh(){ call('getRoster', [PIN], render); }
 

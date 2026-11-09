@@ -110,7 +110,6 @@
         <label style="flex:1">Check in<br><input id="aIn" type="time" style="width:100%"></label>
         <label style="flex:1">Check out<br><input id="aOut" type="time" style="width:100%"></label>
       </div>
-      <div class="row" style="margin-top:6px"><button class="grey" style="flex:1" onclick="aNow('aIn')">In = now</button><button class="grey" style="flex:1" onclick="aNow('aOut')">Out = now</button></div>
       <div id="aCur" class="hint"></div>
       <select id="aReason" style="width:100%"><option value="">Early check-out reason (only if under 10 h)</option><option value="SL">Sick</option><option value="PL">Personal (unpaid)</option><option value="OTHER">Other</option></select>
       <select id="aBrk" style="width:100%;margin-top:8px"><option value="">Sunday lunch break? (Sundays only)</option><option value="Y">Break taken – deduct 1 h</option><option value="N">No break</option></select>
@@ -137,7 +136,6 @@
         <label style="flex:1">Check in<br><input id="tIn" type="time" style="width:100%"></label>
         <label style="flex:1">Check out<br><input id="tOut" type="time" style="width:100%"></label>
       </div>
-      <div class="row" style="margin-top:6px"><button class="grey" style="flex:1" onclick="aNow('tIn')">In = now</button><button class="grey" style="flex:1" onclick="aNow('tOut')">Out = now</button></div>
       <label style="display:block;margin:10px 0 4px"><input type="checkbox" id="tAll" onchange="document.querySelectorAll('#tList input').forEach(c => c.checked = this.checked)"> <b>Select all</b></label>
       <div id="tList"></div>
       <select id="tReason" style="width:100%;margin-top:8px"><option value="">Early check-out reason (only if under 10 h)</option><option value="SL">Sick</option><option value="PL">Personal (unpaid)</option><option value="OTHER">Other</option></select>

@@ -55,6 +55,7 @@
   .tabs{display:flex;flex-wrap:wrap;gap:6px;position:sticky;top:0;z-index:5;background:var(--bg);padding:8px 0;margin-bottom:4px}
   .tabs button{flex:1 1 30%;background:#E5E7EB;color:#1F2937;padding:10px 6px;font-size:14px}
   .sm{font-size:14px !important;padding:8px 9px !important}
+  .warnb{background:#FFF3CD;color:#8A5A00;border:1px solid #E0B252;border-radius:14px;padding:3px 9px;font-size:13px;font-weight:bold;margin-left:4px} .warnb.hot{background:#C62828;color:#fff;border-color:#C62828}
   .apb{background:#C62828;color:#fff;border-radius:10px;padding:0 7px;font-size:12px;margin-left:4px} .apb:empty{display:none}
   .lvp{display:none;width:100%;gap:6px;margin-top:6px} .lvp.open{display:flex} .lvp button{flex:1}
   .tabs button.on{background:var(--blue);color:#fff}
@@ -111,6 +112,7 @@
       <button id="swOne" class="grey" style="flex:1" onclick="attMode('one')">▸ One worker</button>
       <button id="swBulk" class="grey" style="flex:1" onclick="attMode('bulk')">▸ Whole shift (bulk)</button>
       <button id="swPen" class="grey" style="flex:1" onclick="attMode('pen')">▸ Penalty</button>
+      <button id="swWarn" class="grey" style="flex:1" onclick="attMode('warn')">▸ Warnings</button>
     </div></div>
     <div class="card" data-pg="att" id="attOne">
       <b>Admin attendance – add / correct (no location check)</b>
@@ -124,6 +126,11 @@
       <div id="aCur" class="hint"></div>
       <input id="aNote" placeholder="Note – why (required)" style="width:100%;margin-top:8px">
       <button class="pri" style="width:100%;margin-top:8px" onclick="aSave()">Save</button>
+    </div>
+    <div class="card" data-pg="att" id="attWarn">
+      <b>⚠ Warnings this month</b>
+      <div class="hint">Supervisors give warnings from the worker card. Every 6th warning in a month deducts 4 h from basic hours automatically. Removing a warning also takes back a 4 h deduction that is no longer due. The list starts fresh each month.</div>
+      <div id="wnList" style="margin-top:8px">Loading…</div>
     </div>
     <div class="card" data-pg="att" id="attPen">
       <b>⏱ Penalty – deduct hours from basic hours</b>
@@ -349,7 +356,7 @@ function render(d){
     const locked = !w.inT && (lv || absent);   // on leave today: no Check In, not ticked by Select all – change the dropdown to Present first
     return '<div class="card' + (locked ? ' onleave' : '') + '"><div class="row">' +
       '<input type="checkbox" class="chk" data-i="' + i + '" onchange="updBulk()"' + (locked ? ' disabled title="On leave – change to Present first"' : '') + '>' +
-      '<div class="name">' + esc(w.name) + ' ' + badge + '</div>' +
+      '<div class="name">' + esc(w.name) + ' ' + badge + '<button class="warnb' + (w.warn >= 5 ? ' hot' : '') + '" title="Warnings this month – tap to give a warning" onclick="warnW(' + i + ')">⚠ ' + (w.warn || 0) + '</button></div>' +
       (locked ? '' : '<button class="in" ' + (w.inT ? 'disabled' : '') + ' onclick="act(\'checkIn\',' + i + ')">Check In</button>') +
       '<button class="out" ' + (!w.inT || w.outT ? 'disabled' : '') + ' onclick="act(\'checkOut\',' + i + ')">Check Out</button>' +
       '<select ' + (w.inT ? 'disabled' : '') + ' onchange="abs(' + i + ',this)">' +
@@ -498,6 +505,13 @@ function penDel(i){
   const w = window._list[i];
   ask({ title: 'Remove penalty', names: [w.name], yes: 'Remove', txt: 'Reason (optional)', en: 'Remove the ' + w.pen + ' h penalty for today? The removal is recorded.' },
     f => call('removePenalty', [PIN, w.name, '', f.txt || ''], d => { render(d); toast(w.name + ': penalty removed', true); }));
+}
+/** Warning – counted per month; every 6th warning takes 4 h off basic hours (server does it). */
+function warnW(i){
+  const w = window._list[i], n = (w.warn || 0) + 1, cut = n % 6 === 0;
+  ask({ title: '⚠ Give warning', names: [w.name], yes: 'Give warning ' + n, warn: true, txt: 'Reason (required)', txtReq: true, txtMsg: 'Write the reason',
+        en: w.name + ' has ' + (w.warn || 0) + ' warning(s) this month.\n' + (cut ? 'This is warning ' + n + ': 4 HOURS will be deducted from his basic hours today.' : 'This will be warning ' + n + '. At 6 warnings in a month, 4 hours are deducted from basic hours.') },
+    f => call('addWarning', [PIN, w.name, f.txt], d => { render(d); toast(w.name + ': warning ' + n + (cut ? ' – 4 h deducted' : ''), true); }));
 }
 /** Quick note – added to today's Daily Log row as a fixed record. */
 function noteW(i){
@@ -694,8 +708,9 @@ function pg(p){
 let ATT = '';
 function attMode(m){ ATT = ATT === m ? '' : m; attShow(); }
 function attShow(){
+  if (ATT === 'warn') wnLoad();
   if (ATT === 'pen' && !$('pnDate').value) $('pnDate').value = dubaiNow().toISOString().slice(0, 10);
-  [['one', 'attOne', 'swOne', 'One worker'], ['bulk', 'attBulk', 'swBulk', 'Whole shift (bulk)'], ['pen', 'attPen', 'swPen', 'Penalty']].forEach(([m, card, btn, txt]) => {
+  [['one', 'attOne', 'swOne', 'One worker'], ['bulk', 'attBulk', 'swBulk', 'Whole shift (bulk)'], ['pen', 'attPen', 'swPen', 'Penalty'], ['warn', 'attWarn', 'swWarn', 'Warnings']].forEach(([m, card, btn, txt]) => {
     $(card).style.display = ATT === m ? '' : 'none';
     $(btn).className = ATT === m ? 'pri' : 'grey';
     $(btn).textContent = (ATT === m ? '▾ ' : '▸ ') + txt;
@@ -765,6 +780,24 @@ function apDo(k, dec){
   ask({ title: dec === 'Approved' ? 'Approve leave' : 'Mark unpaid', names: [p.name], yes: dec === 'Approved' ? 'Approve' : 'Mark unpaid', warn: dec !== 'Approved',
         en: (LEAVE[p.code] || p.code) + ', ' + niceD(p.from) + (p.days > 1 ? ' – ' + niceD(p.to) : '') + ': ' + (dec === 'Approved' ? 'approve as PAID leave?' : 'mark as UNPAID?') + (p.code === 'EL' ? '\nThis decision also applies to the remaining days of this leave.' : '') },
     () => call('decideLeave', [PIN, p.name, p.code, p.from, p.to, dec, note], l => { apDraw(l); toast(p.name + ': ' + (dec === 'Approved' ? 'approved' : 'unpaid'), true); }));
+}
+/* ---- admin warnings ---- */
+function wnLoad(){ call('listWarnings', [PIN], wnDraw); }
+function wnDraw(l){
+  window._wn = l || [];
+  const by = {}; window._wn.forEach(w => (by[w.name] = by[w.name] || []).push(w));
+  const names = Object.keys(by).sort();
+  $('wnList').innerHTML = !names.length ? '<div class="hint">No warnings this month.</div>' : names.map(n => {
+    const ws = by[n], c = ws.filter(w => w.type === 'W').length;
+    return '<div style="padding:8px 0;border-bottom:1px solid var(--line)"><b>' + esc(n) + '</b> · <span class="warnb' + (c >= 5 ? ' hot' : '') + '">⚠ ' + c + '</span>' +
+      ws.map(w => '<div style="margin-top:4px">' + (w.type === 'P' ? '<b style="color:#C62828">−4 h</b> ' + niceD(w.ds) + ' · ' + esc(w.reason)
+        : niceD(w.ds) + ' · ' + esc(w.reason) + ' · by ' + esc(w.by) + ' <button class="grey sm" onclick="wnDel(\'' + esc(w.id) + '\')">Remove</button>') + '</div>').join('') + '</div>';
+  }).join('');
+}
+function wnDel(id){
+  const w = window._wn.find(x => x.id === id);
+  ask({ title: 'Remove warning', names: [w.name], yes: 'Remove', txt: 'Reason (optional)', en: niceD(w.ds) + ': ' + w.reason + '\nRemove this warning? If an automatic 4 h deduction is no longer due, it is taken back.' },
+    f => call('removeWarning', [PIN, id, (f && f.txt) || ''], l => { wnDraw(l); toast('Warning removed', true); }));
 }
 /* ---- admin penalty ---- */
 function pnLoad(){

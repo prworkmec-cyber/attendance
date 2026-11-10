@@ -68,6 +68,22 @@
   @media print{ body *{visibility:hidden} #wlM,#wlM *{visibility:visible} #wlM{position:absolute;inset:0;display:block;background:none;padding:0}
     #wlM .box{max-height:none;overflow:visible;border-radius:0;box-shadow:none;max-width:none;padding:10mm} #wlM .noprint{display:none!important} }
   #mEn{font-size:15px;line-height:1.5}
+  details.sec{background:var(--card);border:1px solid var(--line);border-radius:10px;margin-bottom:10px}
+  details.sec>summary{list-style:none;cursor:pointer;padding:14px 12px;font-weight:bold;font-size:16px;display:flex;align-items:center;gap:8px}
+  details.sec>summary::-webkit-details-marker{display:none}
+  details.sec>summary::after{content:'▸';margin-left:auto;color:var(--muted);transition:transform .15s} details.sec[open]>summary::after{transform:rotate(90deg)}
+  details.sec>.in2{padding:0 10px 10px} details.sec .card{margin-bottom:8px}
+  .sct{font-weight:normal;font-size:13px;color:var(--muted)} .sct b{color:#fff;background:var(--red);border-radius:10px;padding:1px 7px;font-size:12px}
+  .it{padding:8px 2px;border-bottom:1px solid var(--line);font-size:14px} .it:last-child{border-bottom:none}
+  .tst{display:inline-block;padding:2px 8px;border-radius:10px;font-size:12px;font-weight:bold;color:#fff}
+  .t-ns{background:#6B7280} .t-ip{background:#1F6FB2} .t-dn{background:#2E7D32} .t-bl{background:#D97706} .t-cx{background:#9CA3AF}
+  .gantt{position:relative;font-size:12px;margin:6px 0 10px;overflow:hidden}
+  .g-hd,.g-r{display:flex;align-items:center} .g-l{width:38%;flex:none;padding-right:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .g-t{position:relative;flex:1;height:22px} .g-hd .g-t{height:18px;color:var(--muted)} .g-r{border-top:1px solid var(--line);padding:3px 0}
+  .g-b{position:absolute;top:3px;height:16px;border-radius:4px;min-width:6px} .g-b.od{outline:2px solid var(--red);outline-offset:1px}
+  .g-now{position:absolute;top:0;bottom:0;width:2px;background:var(--red);opacity:.6}
+  .tk{border:1px solid var(--line);border-radius:10px;padding:10px;margin-bottom:8px} .tk.od{border-left:5px solid var(--red)}
+  .tk .up{font-size:13px;color:#374151;background:#F9FAFB;border-radius:6px;padding:6px 8px;margin-top:6px;white-space:pre-wrap;max-height:160px;overflow:auto}
   .ur{direction:rtl;text-align:right;font-family:'Noto Nastaliq Urdu',serif;font-size:18px;line-height:2.1;background:#F1F5F9;border-radius:8px;padding:6px 12px;margin:10px 0}
   #mNames{font-size:13px;color:var(--muted);margin:6px 0}
   .btns{display:flex;gap:8px;margin-top:12px} .btns button{flex:1}
@@ -92,20 +108,36 @@
   </div>
 
   <div id="sup" class="hidden">
+    <details class="sec" id="secAtt" open ontoggle="secSave(this)"><summary>👷 Attendance <span class="sct" id="sAtt"></span></summary><div class="in2">
     <div id="open" class="card warn hidden"></div>
-    <div id="pend" class="card hidden" style="border-left:5px solid #B26A00"></div>
     <div id="list"></div>
     <button class="pri" style="width:100%" onclick="refresh()">Refresh</button>
     <div class="bulkbar">
       <label class="selrow"><input type="checkbox" id="all" class="chk" onchange="selAll(this)"> Select all <span id="selInfo"></span></label>
       <div class="btns"><button id="bIn" class="in" disabled onclick="bulk('checkIn')">Check In selected</button><button id="bOut" class="out" disabled onclick="bulk('checkOut')">Check Out selected</button></div>
     </div>
+    </div></details>
+    <details class="sec" id="secLv" ontoggle="secSave(this)"><summary>🏖 Leave &amp; approvals <span class="sct" id="sLv"></span></summary><div class="in2">
+      <div id="pend" class="card hidden" style="border-left:5px solid #B26A00"></div><div id="lvS"></div>
+    </div></details>
+    <details class="sec" id="secWn" ontoggle="secSave(this)"><summary>⚠ Warnings <span class="sct" id="sWn"></span></summary><div class="in2" id="wnS"></div></details>
+    <details class="sec" id="secPn" ontoggle="secSave(this)"><summary>⏱ Penalties <span class="sct" id="sPn"></span></summary><div class="in2" id="pnS"></div></details>
+    <details class="sec" id="secTk" ontoggle="secSave(this)"><summary>📋 Tasks <span class="sct" id="sTk"></span></summary><div class="in2" id="tkS"></div></details>
   </div>
 
   <div id="adm" class="hidden">
     <div class="tabs" id="tabs">
-      <button data-p="appr" onclick="pg('appr')">🔔 Approvals<span id="apBadge" class="apb"></span></button><button data-p="att" onclick="pg('att')">Attendance</button><button data-p="staff" onclick="pg('staff')">Staff</button><button data-p="money" onclick="pg('money')">Money</button><button data-p="ls" onclick="pg('ls')">Leave Salary</button><button data-p="set" onclick="pg('set')">Settings</button>
+      <button data-p="appr" onclick="pg('appr')">🔔 Approvals<span id="apBadge" class="apb"></span></button><button data-p="task" onclick="pg('task')">📋 Tasks</button><button data-p="att" onclick="pg('att')">Attendance</button><button data-p="staff" onclick="pg('staff')">Staff</button><button data-p="money" onclick="pg('money')">Money</button><button data-p="ls" onclick="pg('ls')">Leave Salary</button><button data-p="set" onclick="pg('set')">Settings</button>
     </div>
+    <div class="card" data-pg="task">
+      <b>New task</b>
+      <input id="tkTitle" placeholder="Task title" maxlength="120" style="width:100%;margin-top:8px">
+      <textarea id="tkDet" rows="3" maxlength="1500" placeholder="Details (optional)" style="width:100%;margin-top:6px;font-size:15px;padding:8px;border-radius:8px;border:1px solid var(--line);font-family:inherit"></textarea>
+      <div class="row" style="margin-top:6px"><label style="flex:1">Start<br><input type="date" id="tkStart" style="width:100%"></label><label style="flex:1">Due<br><input type="date" id="tkDue" style="width:100%"></label></div>
+      <div style="margin-top:6px">Assign to: <span id="tkTo"></span></div>
+      <button class="pri" style="width:100%;margin-top:8px" onclick="tkAdd()">Give task</button>
+    </div>
+    <div class="card" data-pg="task"><div class="row"><b style="flex:1">Timeline</b><button class="grey sm" onclick="tkLoad()">Refresh</button></div><div id="tkA"></div></div>
     <div class="card" data-pg="staff">
       <b>Add worker</b>
       <div class="row" style="margin-top:8px">
@@ -216,6 +248,7 @@
   <h3 id="mTitle"></h3>
   <div id="mEn"></div>
   <div id="mNames"></div>
+  <div id="mHtml"></div>
   <div id="mForm" style="display:none">
     <select id="mReason" style="width:100%;margin:6px 0"><option value="">— Reason</option><option value="SL">Sick</option><option value="PL">Personal (unpaid)</option><option value="OTHER">Other</option></select>
     <textarea id="mNote" rows="2" maxlength="300" placeholder="Note / more details" style="width:100%;font-size:15px;padding:8px;border-radius:8px;border:1px solid var(--line);font-family:inherit;margin-bottom:6px"></textarea>
@@ -337,6 +370,100 @@ $('pin').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); })
 })();
 
 function refresh(){ call('getRoster', [PIN], render); }
+/* ---- supervisor sections (collapsible; open/closed remembered on this phone) ---- */
+function secSave(el){ try { localStorage.setItem('sec_' + el.id, el.open ? '1' : '0'); } catch (e) {} }
+function secInit(){ ['secAtt', 'secLv', 'secWn', 'secPn', 'secTk'].forEach(id => { let v = null; try { v = localStorage.getItem('sec_' + id); } catch (e) {} if (v !== null) $(id).open = v === '1'; }); }
+secInit();
+function secDraw(d){
+  window._d = d;
+  const L = d.list, inN = L.filter(w => w.inT && !w.outT).length, outN = L.filter(w => w.outT).length;
+  const lvW = L.filter(w => (w.leave && !w.inT) || (w.status && w.status !== 'P') || w.planned);
+  $('sAtt').textContent = L.length + ' workers · ' + inN + ' in · ' + outN + ' out';
+  const pn = (d.pending || []).length;
+  $('sLv').innerHTML = lvW.length + ' on leave' + (pn ? ' <b>' + pn + ' waiting</b>' : '');
+  $('lvS').innerHTML = !lvW.length ? '<div class="hint">Nobody on leave today.</div>' : lvW.map(w => {
+    const lv = w.leave && !w.inT ? w.leave : null, code = lv ? lv.code : w.status && w.status !== 'P' ? w.status : '';
+    return '<div class="it"><b>' + esc(w.name) + '</b> – ' + (code ? esc(LEAVE[code] || code) + (lv ? ', back ' + niceD(lv.ret) : '') : '') +
+      (w.planned ? (code ? ' · ' : '') + 'planned ' + (w.planned.code === 'EL' ? 'emergency leave' : 'vacation') + ' from ' + niceD(w.planned.from) : '') +
+      (w.pay === 'Pending' ? ' · <b style="color:#B26A00">⏳ waiting approval</b>' : w.pay === 'Approved' ? ' · <b style="color:#2E7D32">approved</b>' : w.pay === 'Unpaid' ? ' · <b style="color:#C62828">unpaid</b>' : '') + '</div>';
+  }).join('');
+  const ws = (d.warns || []).filter(w => w.type === 'W');
+  $('sWn').textContent = ws.length + ' this month';
+  window._ws = ws;
+  $('wnS').innerHTML = (!ws.length ? '<div class="hint">No warnings this month.</div>' : ws.slice().reverse().map(w => '<div class="it"><b>' + esc(w.name) + '</b> · ' + niceD(w.ds) + ' · ' + esc(w.reason) +
+      (w.signed ? ' · ✍ signed' : w.refused ? ' · <b style="color:#C62828">refused to sign</b>' : '') + ' <button class="grey sm" onclick="wlOpen(\'' + esc(w.id) + '\')">📄 Letter</button></div>').join('')) +
+    '<div class="hint" style="margin-top:6px">To give a warning, tap the ⚠ button on the worker\'s card. At 6 warnings in a month, 4 h are deducted.</div>';
+  const ps = L.map((w, i) => ({ w, i })).filter(x => x.w.pen);
+  $('sPn').textContent = ps.length ? ps.length + ' today' : 'none today';
+  $('pnS').innerHTML = (!ps.length ? '<div class="hint">No penalties today.</div>' : ps.map(x => '<div class="it"><b>' + esc(x.w.name) + '</b> · <b style="color:#C62828">−' + esc(x.w.pen) + ' h</b> <button class="grey sm" onclick="penDel(' + x.i + ')">Remove</button></div>').join('')) +
+    '<div class="hint" style="margin-top:6px">To give a penalty, tap ⏱ Penalty on the worker\'s card.</div>';
+  tkDraw(d.tasks || [], d.today, false);
+}
+/* ---- tasks: admin gives, supervisor replies; Gantt timeline for both ---- */
+const TST = { 'Not started': 't-ns', 'In progress': 't-ip', 'Done': 't-dn', 'Blocked': 't-bl', 'Cancelled': 't-cx' };
+const dN = s => Date.UTC(+s.slice(0, 4), +s.slice(5, 7) - 1, +s.slice(8, 10)) / 864e5;
+const dS = n => new Date(n * 864e5).toISOString().slice(0, 10);
+function tkOver(t, today){ return t.due < today && t.status !== 'Done' && t.status !== 'Cancelled'; }
+function gantt(ts, today, admin){
+  ts = ts.filter(t => t.status !== 'Cancelled'); if (!ts.length) return '';
+  const t0 = dN(today), lo = Math.min(t0 - 2, ...ts.map(t => dN(t.start))), hi = Math.max(t0 + 5, ...ts.map(t => dN(t.due))) + 1, span = hi - lo;
+  const pc = n => ((n - lo) / span * 100).toFixed(2) + '%', step = Math.max(1, Math.ceil(span / 6));
+  let hd = ''; for (let n = lo; n < hi; n += step) hd += '<span style="position:absolute;left:' + pc(n) + '">' + niceD(dS(n)) + '</span>';
+  const col = { 'Not started': '#9CA3AF', 'In progress': '#1F6FB2', 'Done': '#2E7D32', 'Blocked': '#D97706' };
+  return '<div class="gantt"><div class="g-hd"><div class="g-l"></div><div class="g-t">' + hd + '</div></div>' +
+    ts.map(t => '<div class="g-r"><div class="g-l" title="' + esc(t.title) + '">' + esc(t.title) + (admin ? ' <span class="hint">· ' + esc(t.to) + '</span>' : '') + '</div><div class="g-t">' +
+      '<div class="g-b' + (tkOver(t, today) ? ' od' : '') + '" style="left:' + pc(dN(t.start)) + ';width:' + ((dN(t.due) + 1 - dN(t.start)) / span * 100).toFixed(2) + '%;background:' + col[t.status] + '"></div>' +
+      '<div class="g-now" style="left:' + pc(t0 + 0.5) + '"></div></div></div>').join('') + '</div>';
+}
+function tkDraw(ts, today, admin){
+  window._tk = ts; window._tkToday = today;
+  const open = ts.filter(t => t.status !== 'Done' && t.status !== 'Cancelled'), od = open.filter(t => tkOver(t, today)).length;
+  const html = (!ts.length ? '<div class="hint">' + (admin ? 'No tasks yet.' : 'No tasks from admin.') + '</div>' : gantt(ts, today, admin) +
+    ts.slice().sort((a, b) => (a.status === 'Done' || a.status === 'Cancelled') - (b.status === 'Done' || b.status === 'Cancelled') || a.due.localeCompare(b.due)).map(t => {
+      const k = ts.indexOf(t), o = tkOver(t, today), fin = t.status === 'Done' || t.status === 'Cancelled';
+      return '<div class="tk' + (o ? ' od' : '') + '"><div class="row"><b style="flex:1">' + esc(t.title) + '</b><span class="tst ' + TST[t.status] + '">' + esc(t.status) + '</span></div>' +
+        '<div class="hint">' + (admin ? 'To <b>' + esc(t.to) + '</b> · ' : '') + niceD(t.start) + ' → due ' + niceD(t.due) + (o ? ' · <b style="color:#C62828">OVERDUE</b>' : '') + '</div>' +
+        (t.details ? '<div style="margin-top:4px;white-space:pre-wrap">' + esc(t.details) + '</div>' : '') +
+        (t.updates.length ? '<div class="up">' + t.updates.map(esc).join('\n') + '</div>' : '') +
+        (t.status === 'Cancelled' ? '' : '<div class="row" style="margin-top:6px"><select id="tkS' + k + '">' + Object.keys(TST).filter(s => s !== 'Cancelled').map(s => '<option' + (s === t.status ? ' selected' : '') + '>' + s + '</option>').join('') + '</select>' +
+          '<input id="tkR' + k + '" placeholder="Reply / update" maxlength="800" style="flex:1;min-width:140px"><button class="pri sm" onclick="tkUpd(' + k + ')">Send</button>' +
+          (admin ? '<button class="grey sm" onclick="tkEdit(' + k + ')">Edit</button><button class="grey sm" onclick="tkCancel(' + k + ')">Cancel task</button>' : '') + '</div>') + '</div>';
+    }).join(''));
+  if (admin) $('tkA').innerHTML = html;
+  else { $('tkS').innerHTML = html; $('sTk').innerHTML = open.length + ' open' + (od ? ' <b>' + od + ' overdue</b>' : ''); }
+}
+function tkRes(r){ if (r.admin) tkAdmin(r); else { window._d.tasks = r.tasks; tkDraw(r.tasks, r.today, false); } }
+function tkAdmin(r){
+  window._sups = r.sups;
+  if (!$('tkTo').dataset.done) { $('tkTo').innerHTML = r.sups.map(n => '<label style="display:inline-block;margin-right:12px"><input type="checkbox" class="tkTo" value="' + esc(n) + '"> ' + esc(n) + '</label>').join(''); $('tkTo').dataset.done = 1; }
+  if (!$('tkStart').value) { $('tkStart').value = r.today; $('tkDue').value = r.today; }
+  tkDraw(r.tasks, r.today, true);
+}
+function tkLoad(){ call('listTasks', [PIN], tkAdmin); }
+function tkAdd(){
+  const t = { title: $('tkTitle').value.trim(), details: $('tkDet').value.trim(), start: $('tkStart').value, due: $('tkDue').value, to: [...document.querySelectorAll('.tkTo:checked')].map(c => c.value) };
+  if (!t.title) { toast('Write the task title', false); return; }
+  if (!t.to.length) { toast('Choose the supervisor', false); return; }
+  if (!t.start || !t.due || t.due < t.start) { toast('Check the start and due dates', false); return; }
+  call('addTask', [PIN, t], r => { toast('Task given to ' + t.to.join(', '), true); $('tkTitle').value = ''; $('tkDet').value = ''; document.querySelectorAll('.tkTo').forEach(c => c.checked = false); tkAdmin(r); });
+}
+function tkUpd(k){
+  const t = window._tk[k], st = $('tkS' + k).value, rp = $('tkR' + k).value.trim();
+  if (st === t.status && !rp) { toast('Change the status or write a reply', false); return; }
+  call('updateTask', [PIN, t.id, st, rp], r => { toast('Sent', true); tkRes(r); });
+}
+function tkEdit(k){
+  const t = window._tk[k];
+  ask({ title: 'Edit task', names: [t.to], yes: 'Save', en: 'Change the task, then Save.',
+        html: '<input id="teT" value="' + esc(t.title) + '" maxlength="120" style="width:100%;margin-bottom:6px"><textarea id="teD" rows="3" maxlength="1500" style="width:100%;font-family:inherit;font-size:15px">' + esc(t.details) + '</textarea>' +
+              '<div class="row"><label style="flex:1">Start<br><input type="date" id="teS" value="' + t.start + '"></label><label style="flex:1">Due<br><input type="date" id="teU" value="' + t.due + '"></label></div>' },
+    () => call('editTask', [PIN, t.id, { title: $('teT').value, details: $('teD').value, start: $('teS').value, due: $('teU').value }], r => { toast('Task changed', true); tkAdmin(r); }));
+}
+function tkCancel(k){
+  const t = window._tk[k];
+  ask({ title: 'Cancel task', names: [t.to], yes: 'Cancel task', warn: true, txt: 'Reason (optional)', en: 'Cancel "' + t.title + '"?' },
+    f => call('editTask', [PIN, t.id, { cancel: true, reason: f.txt || '' }], r => { toast('Task cancelled', true); tkAdmin(r); }));
+}
 
 function render(d){
   OFFSET = d.now - Date.now(); tick(); EXEC_URL = d.url || EXEC_URL;
@@ -350,6 +477,7 @@ function render(d){
       '<div class="row" style="margin-top:4px"><button class="grey sm" onclick="docAdd(window._pend[' + k + '])">📄 Add certificate</button>' + (p.docs ? '<button class="grey sm" onclick="docView(window._pend[' + k + '],true)">View (' + p.docs + ')</button>' : '<span class="hint">no document yet</span>') + '</div></div>').join('') +
       '<div class="hint">Take a photo of the medical certificate / proof. Remind admin to approve.</div>'; pe.classList.remove('hidden'); }
   else pe.classList.add('hidden');
+  secDraw(d);
   $('list').innerHTML = d.list.map((w, i) => {
     let badge = '<span class="badge">Not marked</span>';
     if (w.status && w.status !== 'P') badge = '<span class="badge b-abs">' + esc(LEAVE[w.status] || w.status) + '</span>';
@@ -394,6 +522,7 @@ const LEAVE_OPTS = Object.keys(LEAVE).map(k => '<option value="' + k + '">' + LE
 function ask(o, onYes, onNo){
   $('mTitle').textContent = o.title; $('mTitle').className = o.warn ? 'warnh' : '';
   $('mEn').innerHTML = esc(o.en).replace(/\n/g, '<br>');
+  $('mHtml').innerHTML = o.html || '';
   $('mForm').style.display = o.form ? '' : 'none';
   if (o.form) { $('mReason').value = ''; $('mNote').value = ''; }
   $('mVac').style.display = o.vac ? '' : 'none'; if (o.vac) $('mVacFrom').value = o.vac;
@@ -757,6 +886,7 @@ function pg(p){
   if (p === 'ls') lsrLoad();
   if (p === 'appr') apLoad();
   if (p === 'att') attShow();
+  if (p === 'task') tkLoad();
 }
 /* attendance page: open one section at a time (tap again to close) */
 let ATT = '';

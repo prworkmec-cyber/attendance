@@ -55,6 +55,7 @@
   .tabs{display:flex;flex-wrap:wrap;gap:6px;position:sticky;top:0;z-index:5;background:var(--bg);padding:8px 0;margin-bottom:4px}
   .tabs button{flex:1 1 30%;background:#E5E7EB;color:#1F2937;padding:10px 6px;font-size:14px}
   .sm{font-size:14px !important;padding:8px 9px !important}
+  .apb{background:#C62828;color:#fff;border-radius:10px;padding:0 7px;font-size:12px;margin-left:4px} .apb:empty{display:none}
   .lvp{display:none;width:100%;gap:6px;margin-top:6px} .lvp.open{display:flex} .lvp button{flex:1}
   .tabs button.on{background:var(--blue);color:#fff}
   #sigM{z-index:60} #sigM label{display:block;padding:5px 0} #modal h3.warnh{color:var(--red)}
@@ -84,6 +85,7 @@
 
   <div id="sup" class="hidden">
     <div id="open" class="card warn hidden"></div>
+    <div id="pend" class="card hidden" style="border-left:5px solid #B26A00"></div>
     <div id="list"></div>
     <button class="pri" style="width:100%" onclick="refresh()">Refresh</button>
     <div class="bulkbar">
@@ -94,7 +96,7 @@
 
   <div id="adm" class="hidden">
     <div class="tabs" id="tabs">
-      <button data-p="att" onclick="pg('att')">Attendance</button><button data-p="staff" onclick="pg('staff')">Staff</button><button data-p="money" onclick="pg('money')">Money</button><button data-p="ls" onclick="pg('ls')">Leave Salary</button><button data-p="set" onclick="pg('set')">Settings</button>
+      <button data-p="appr" onclick="pg('appr')">🔔 Approvals<span id="apBadge" class="apb"></span></button><button data-p="att" onclick="pg('att')">Attendance</button><button data-p="staff" onclick="pg('staff')">Staff</button><button data-p="money" onclick="pg('money')">Money</button><button data-p="ls" onclick="pg('ls')">Leave Salary</button><button data-p="set" onclick="pg('set')">Settings</button>
     </div>
     <div class="card" data-pg="staff">
       <b>Add worker</b>
@@ -181,6 +183,11 @@
       <input id="lNote" placeholder="Note (optional)" style="width:100%;margin-top:8px">
       <button class="pri" style="width:100%;margin-top:8px" onclick="lSave()">Save loan</button>
       <div id="lList" class="hint" style="margin-top:10px"></div>
+    </div>
+    <div class="card" data-pg="appr">
+      <b>🔔 Leave approvals</b>
+      <div class="hint">Every leave except Annual Vacation waits here. Approve when the worker shows the document (paid), or mark it unpaid. Pending leave is not decided automatically.</div>
+      <div id="apList" style="margin-top:8px">Loading…</div>
     </div>
     <div class="card" data-pg="set"><button class="pri" style="width:100%" onclick="setSiteHere()">📍 Set company location = my current position</button></div>
     <div class="card" data-pg="staff"><table id="staff"></table></div>
@@ -289,7 +296,7 @@ function doLogin(auto){
   call('login', [PIN], r => {
     $('pin').value = ''; LAST = Date.now(); sesSave(); $('lo').classList.remove('hidden');
     $('login').classList.add('hidden');
-    if (r.role === 'ADMIN') { $('adm').classList.remove('hidden'); $('hdr').textContent = 'Admin'; loadStaff(); let p = 'att'; try { p = localStorage.getItem('admPg') || 'att'; } catch (e) {} pg(p); }
+    if (r.role === 'ADMIN') { $('adm').classList.remove('hidden'); $('hdr').textContent = 'Admin'; loadStaff(); apLoad(); let p = 'att'; try { p = localStorage.getItem('admPg') || 'att'; } catch (e) {} pg(p); }
     else { $('sup').classList.remove('hidden'); if (r.roster) render(r.roster); else refresh(); getLoc(() => {}, true); }   // ask location permission early
   }, e => { PIN = ''; $('login').classList.remove('hidden'); $('hdr').textContent = 'Enter your password'; if (auto) { sesClear(); $('pin').value = ''; } toast(e, false); });
 }
@@ -310,6 +317,9 @@ function render(d){
   const o = $('open');
   if (d.open.length){ o.innerHTML = '<b>No check-out recorded:</b> ' + d.open.map(esc).join(', ') + '<br>Admin must correct these in Daily Log.'; o.classList.remove('hidden'); }
   else o.classList.add('hidden');
+  const pe = $('pend'), pl0 = d.pending || [];
+  if (pl0.length) { pe.innerHTML = '<b>⏳ Waiting for admin approval (' + pl0.length + ')</b><br>' + pl0.map(p => esc(p.name) + ' – ' + esc(LEAVE[p.code] || p.code) + ' (' + niceD(p.from) + (p.days > 1 ? ' – ' + niceD(p.to) : '') + ')').join('<br>') + '<div class="hint">Remind admin to approve once the worker shows the document.</div>'; pe.classList.remove('hidden'); }
+  else pe.classList.add('hidden');
   $('list').innerHTML = d.list.map((w, i) => {
     let badge = '<span class="badge">Not marked</span>';
     if (w.status && w.status !== 'P') badge = '<span class="badge b-abs">' + esc(LEAVE[w.status] || w.status) + '</span>';
@@ -323,7 +333,9 @@ function render(d){
                                         : '<span class="due">Return date passed (' + niceD(lv.ret) + ') – not back yet</span>';
     const lsTxt = lv && lv.ls ? ' · Leave salary: ' + (/^PAID/.test(lv.ls) ? '<b style="color:#2E7D32">' + esc(lv.ls) + '</b>' + (lv.by ? ' (received by ' + esc(lv.by) + (lv.signed ? ', signed ✍' : '') + ')' : '') : '<b class="due">' + esc(lv.ls) + '</b>') : '';
     const pl = w.planned, plTxt = !pl ? '' : '<b style="color:#B26A00">' + (pl.code === 'EL' ? 'Emergency leave' : '✈ Annual vacation') + ' from ' + esc(niceD(pl.from)) + ' – ' + pl.days + ' days</b>' + (pl.ls ? ' · Leave salary: ' + (/^PAID/.test(pl.ls) ? '<b style="color:#2E7D32">' + esc(pl.ls) + '</b>' + (pl.by ? ' (received by ' + esc(pl.by) + (pl.signed ? ', signed ✍' : '') + ')' : '') : '<b class="due">' + esc(pl.ls) + '</b>') : '');
-    const times = (plTxt ? plTxt + (lvTxt || w.inT || w.by ? ' · ' : '') : '') + (lvTxt ? lvTxt + lsTxt + (w.inT || w.by ? ' · ' : '') : '') + (w.adv ? '<b style="color:#C62828">Advance ' + esc(w.adv) + ' AED</b>' + (w.inT || w.by ? ' · ' : '') : '') + (w.inT ? 'In ' + esc(w.inT) : '') + (w.by ? (w.inT ? ' · ' : '') + 'by ' + esc(w.by) : '') + (w.outT ? ' · Out ' + esc(w.outT) + ' · OT ' + esc(w.ot) + 'h' : '') +
+    const payTxt = !w.inT && (absent || lv) ? '<b style="color:#2E7D32">✓ ' + esc(LEAVE[lv ? lv.code : w.status] || w.status) + ' saved</b>' +
+      (w.pay === 'Pending' ? ' · <b style="color:#B26A00">⏳ waiting for admin approval</b>' : w.pay === 'Approved' ? ' · <b style="color:#2E7D32">approved (paid)</b>' : w.pay === 'Unpaid' ? ' · <b style="color:#C62828">unpaid</b>' : '') : '';
+    const times = (payTxt ? payTxt + ' · ' : '') + (plTxt ? plTxt + (lvTxt || w.inT || w.by ? ' · ' : '') : '') + (lvTxt ? lvTxt + lsTxt + (w.inT || w.by ? ' · ' : '') : '') + (w.adv ? '<b style="color:#C62828">Advance ' + esc(w.adv) + ' AED</b>' + (w.inT || w.by ? ' · ' : '') : '') + (w.inT ? 'In ' + esc(w.inT) : '') + (w.by ? (w.inT ? ' · ' : '') + 'by ' + esc(w.by) : '') + (w.outT ? ' · Out ' + esc(w.outT) + ' · OT ' + esc(w.ot) + 'h' : '') +
                   (w.flags ? ' · <span class="flag">' + esc(w.flags) + '</span>' : '') +
                   (w.pen ? ' · <b style="color:#C62828">⏱ Penalty −' + esc(w.pen) + ' h</b> <a href="#" onclick="penDel(' + i + ');return false" style="color:#C62828">remove</a>' : '');
     const locked = !w.inT && (lv || absent);   // on leave today: no Check In, not ticked by Select all – change the dropdown to Present first
@@ -667,6 +679,7 @@ function pg(p){
   document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.p === p));
   try { localStorage.setItem('admPg', p); } catch (e) {}
   if (p === 'ls') lsrLoad();
+  if (p === 'appr') apLoad();
   if (p === 'att') attShow();
 }
 /* attendance page: open one section at a time (tap again to close) */
@@ -679,6 +692,23 @@ function attShow(){
     $(btn).className = ATT === m ? 'pri' : 'grey';
     $(btn).textContent = (ATT === m ? '▾ ' : '▸ ') + txt;
   });
+}
+/* ---- admin leave approvals ---- */
+function apLoad(){ call('listApprovals', [PIN], apDraw); }
+function apDraw(l){
+  window._ap = l || [];
+  $('apBadge').textContent = window._ap.length ? window._ap.length : '';
+  $('apList').innerHTML = !window._ap.length ? '<div class="hint">Nothing waiting. ✓</div>' : window._ap.map((p, k) =>
+    '<div style="padding:8px 0;border-bottom:1px solid var(--line)"><b>' + esc(p.name) + '</b> · ' + esc(LEAVE[p.code] || p.code) + ' · ' + p.shift +
+    '<br>' + niceD(p.from) + (p.days > 1 ? ' – ' + niceD(p.to) + ' (' + p.days + ' days)' : '') + ' · marked by ' + esc(p.by) +
+    '<input id="apN' + k + '" placeholder="Note (optional) – e.g. medical certificate seen" style="width:100%;margin-top:6px">' +
+    '<div class="row" style="margin-top:6px"><button class="in" style="flex:1" onclick="apDo(' + k + ',\'Approved\')">✓ Approve (paid)</button><button class="out" style="flex:1" onclick="apDo(' + k + ',\'Unpaid\')">Mark unpaid</button></div></div>').join('');
+}
+function apDo(k, dec){
+  const p = window._ap[k], note = $('apN' + k).value.trim();
+  ask({ title: dec === 'Approved' ? 'Approve leave' : 'Mark unpaid', names: [p.name], yes: dec === 'Approved' ? 'Approve' : 'Mark unpaid', warn: dec !== 'Approved',
+        en: (LEAVE[p.code] || p.code) + ', ' + niceD(p.from) + (p.days > 1 ? ' – ' + niceD(p.to) : '') + ': ' + (dec === 'Approved' ? 'approve as PAID leave?' : 'mark as UNPAID?') + (p.code === 'EL' ? '\nThis decision also applies to the remaining days of this leave.' : '') },
+    () => call('decideLeave', [PIN, p.name, p.code, p.from, p.to, dec, note], l => { apDraw(l); toast(p.name + ': ' + (dec === 'Approved' ? 'approved' : 'unpaid'), true); }));
 }
 /* ---- admin penalty ---- */
 function pnLoad(){

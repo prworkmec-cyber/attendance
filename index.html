@@ -326,14 +326,14 @@ function render(d){
     const times = (plTxt ? plTxt + (lvTxt || w.inT || w.by ? ' · ' : '') : '') + (lvTxt ? lvTxt + lsTxt + (w.inT || w.by ? ' · ' : '') : '') + (w.adv ? '<b style="color:#C62828">Advance ' + esc(w.adv) + ' AED</b>' + (w.inT || w.by ? ' · ' : '') : '') + (w.inT ? 'In ' + esc(w.inT) : '') + (w.by ? (w.inT ? ' · ' : '') + 'by ' + esc(w.by) : '') + (w.outT ? ' · Out ' + esc(w.outT) + ' · OT ' + esc(w.ot) + 'h' : '') +
                   (w.flags ? ' · <span class="flag">' + esc(w.flags) + '</span>' : '') +
                   (w.pen ? ' · <b style="color:#C62828">⏱ Penalty −' + esc(w.pen) + ' h</b> <a href="#" onclick="penDel(' + i + ');return false" style="color:#C62828">remove</a>' : '');
-    const locked = !w.inT && (lv || absent);   // on any leave: never ticked by Select all, only his own Check In brings him back
+    const locked = !w.inT && (lv || absent);   // on leave today: no Check In, not ticked by Select all – change the dropdown to Present first
     return '<div class="card' + (locked ? ' onleave' : '') + '"><div class="row">' +
-      '<input type="checkbox" class="chk" data-i="' + i + '" onchange="updBulk()"' + (locked ? ' disabled title="On leave – use Check In"' : '') + '>' +
+      '<input type="checkbox" class="chk" data-i="' + i + '" onchange="updBulk()"' + (locked ? ' disabled title="On leave – change to Present first"' : '') + '>' +
       '<div class="name">' + esc(w.name) + ' ' + badge + '</div>' +
-      '<button class="in" ' + (w.inT ? 'disabled' : '') + ' onclick="act(\'checkIn\',' + i + ')">Check In</button>' +
+      (locked ? '' : '<button class="in" ' + (w.inT ? 'disabled' : '') + ' onclick="act(\'checkIn\',' + i + ')">Check In</button>') +
       '<button class="out" ' + (!w.inT || w.outT ? 'disabled' : '') + ' onclick="act(\'checkOut\',' + i + ')">Check Out</button>' +
       '<select ' + (w.inT ? 'disabled' : '') + ' onchange="abs(' + i + ',this)">' +
-        '<option value="">' + (w.outT ? 'Checked out' : w.inT ? 'Active' : absent ? esc(LEAVE[w.status] || w.status) : 'Present') + '</option>' + LEAVE_OPTS +
+        '<option value="">' + (w.outT ? 'Checked out' : w.inT ? 'Active' : absent ? esc(LEAVE[w.status] || w.status) : lv ? esc(LEAVE[lv.code] || lv.code) : 'Present') + '</option>' + (locked ? '<option value="P">✓ Present – he came to work</option>' : '') + LEAVE_OPTS +
       '</select><button class="grey sm" onclick="adv(' + i + ')">+ Advance</button>' + (lv ? '' : '<button class="grey sm" id="lvb' + i + '" onclick="lvT(' + i + ')">▸ Leave</button>') + '<button class="grey sm" style="margin-left:auto" onclick="penW(' + i + ')">⏱ Penalty</button><button class="grey sm" onclick="noteW(' + i + ')">📝 Note</button></div>' +
       (lv ? '' : '<div class="lvp" id="lvp' + i + '"><button class="grey" onclick="vac(' + i + ',\'AV\')">✈ Annual vacation</button><button class="grey" onclick="vac(' + i + ',\'EL\')">Emergency leave</button></div>') +
       (times || w.notes ? '<div class="times">' + times + (w.notes ? (times ? '<br>' : '') + '📝 ' + esc(w.notes) : '') + '</div>' : '') + '</div>';
@@ -505,6 +505,14 @@ function adv(i){
 }
 function abs(i, sel){
   const w = window._list[i], code = sel.value; if (!code) return;
+  if (code === 'P') {   // undo today's leave mark, then the Check In button comes back
+    const cur = w.leave ? w.leave.code : w.status, long = !!w.leave;
+    ask({ title: 'Change to Present', names: [w.name], yes: 'Change to Present', warn: long,
+          en: w.name + ' is marked ' + (LEAVE[cur] || cur) + '. Change him to Present?' + (long ? '\nThis ENDS his ' + (LEAVE[cur] || cur) + (w.leave.left > 0 ? ' ' + w.leave.left + ' day(s) early' : '') + '.' : '') + '\nAfter this, press Check In.' },
+      () => call('clearMark', [PIN, w.name], d => { render(d); toast(w.name + ': changed to Present – now press Check In', true); }),
+      () => { sel.value = ''; });
+    return;
+  }
   const long = LONG.indexOf(code) >= 0;
   ask({ title: 'Leave', names: [w.name], yes: 'Mark leave', days: long, ls: code === 'AV' || code === 'EL',
         en: 'Mark ' + w.name + ' as ' + LEAVE[code] + '?' + (long ? '\nHe will stay at the top of the list, marked on leave every day, until you check him in.' : '') },

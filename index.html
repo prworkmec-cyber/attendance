@@ -130,7 +130,11 @@
     <div class="card" data-pg="att" id="attWarn">
       <b>⚠ Warnings this month</b>
       <div class="hint">Supervisors give warnings from the worker card. Every 6th warning in a month deducts 4 h from basic hours automatically. Removing a warning also takes back a 4 h deduction that is no longer due. The list starts fresh each month.</div>
-      <div id="wnList" style="margin-top:8px">Loading…</div>
+      <div class="row" style="margin-top:8px"><select id="wnWorker" style="flex:1" onchange="wnHint()"></select></div>
+      <div id="wnCur" class="hint"></div>
+      <input id="wnReason" placeholder="Reason (required)" style="width:100%;margin-top:6px">
+      <button class="out" style="width:100%;margin-top:6px" onclick="wnGive()">⚠ Give warning</button>
+      <div id="wnList" style="margin-top:12px">Loading…</div>
     </div>
     <div class="card" data-pg="att" id="attPen">
       <b>⏱ Penalty – deduct hours from basic hours</b>
@@ -784,7 +788,7 @@ function apDo(k, dec){
 /* ---- admin warnings ---- */
 function wnLoad(){ call('listWarnings', [PIN], wnDraw); }
 function wnDraw(l){
-  window._wn = l || [];
+  window._wn = l || []; wnHint();
   const by = {}; window._wn.forEach(w => (by[w.name] = by[w.name] || []).push(w));
   const names = Object.keys(by).sort();
   $('wnList').innerHTML = !names.length ? '<div class="hint">No warnings this month.</div>' : names.map(n => {
@@ -793,6 +797,17 @@ function wnDraw(l){
       ws.map(w => '<div style="margin-top:4px">' + (w.type === 'P' ? '<b style="color:#C62828">−4 h</b> ' + niceD(w.ds) + ' · ' + esc(w.reason)
         : niceD(w.ds) + ' · ' + esc(w.reason) + ' · by ' + esc(w.by) + ' <button class="grey sm" onclick="wnDel(\'' + esc(w.id) + '\')">Remove</button>') + '</div>').join('') + '</div>';
   }).join('');
+}
+function wnCount(n){ return (window._wn || []).filter(w => w.name === n && w.type === 'W').length; }
+function wnHint(){ const n = $('wnWorker').value; $('wnCur').textContent = n ? n + ': ' + wnCount(n) + ' warning(s) this month' : ''; }
+function wnGive(){
+  const name = $('wnWorker').value, why = $('wnReason').value.trim();
+  if (!name) { toast('Select a worker', false); return; }
+  if (!why) { toast('Write the reason', false); return; }
+  const n = wnCount(name) + 1, cut = n % 6 === 0;
+  ask({ title: '⚠ Give warning', names: [name], yes: 'Give warning ' + n, warn: true,
+        en: (cut ? 'This is warning ' + n + ' this month: 4 HOURS will be deducted from his basic hours today.' : 'This will be warning ' + n + ' this month.') + '\nReason: ' + why },
+    () => call('addWarning', [PIN, name, why], m => { toast(m, true); $('wnReason').value = ''; wnLoad(); }));
 }
 function wnDel(id){
   const w = window._wn.find(x => x.id === id);
@@ -934,7 +949,7 @@ function drawStaff(rows){
   if (!$('tDate').value) $('tDate').value = $('aDate').value;
   tDraw(); lsDraw();
   const opts = '<option value="">— Select worker —</option>' + rows.filter(r => r.active).map(r => '<option value="' + esc(r.name) + '">' + esc(r.name) + ' (' + r.shift + ')</option>').join('');
-  ['vWorker', 'lWorker', 'pvWorker', 'pnWorker'].forEach(id => { const k = $(id).value; $(id).innerHTML = opts; $(id).value = k; });
+  ['vWorker', 'lWorker', 'pvWorker', 'pnWorker', 'wnWorker'].forEach(id => { const k = $(id).value; $(id).innerHTML = opts; $(id).value = k; });
   if (!$('vDate').value) $('vDate').value = $('aDate').value;
   if (!$('lDate').value) $('lDate').value = $('aDate').value;
   if (!window._advLoaded) { window._advLoaded = 1; vLoad(); lLoad(); }

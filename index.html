@@ -266,7 +266,7 @@
 
 <script>
 const API = 'https://script.google.com/macros/s/AKfycbyC0FR05RyxhMxK1loRqrLZWp_hDt6FXX2T3Hf7fevP0itNdxwZasc7200WkermL-PsyA/exec';   // Apps Script backend
-let PIN = '', OFFSET = 0, timer, BUSY = 0;
+let PIN = '', OFFSET = 0, timer, BUSY = 0, TOK = '';   // TOK = this phone's login token (one login per account)
 const $ = id => document.getElementById(id);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
@@ -283,9 +283,10 @@ call('serverNow', [], t => { OFFSET = t - Date.now(); tick(); });
 function toast(t, ok){ const m=$('msg'); m.textContent=t; m.style.background= ok? '#2E7D32':'#C62828'; m.style.display='block'; clearTimeout(timer); timer=setTimeout(()=>m.style.display='none', ok ? 3500 : 8000); }
 function call(fn, args, done, onErr){
   BUSY++; document.body.style.cursor = 'progress';
-  fetch(API, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ fn: fn, args: args }) })
+  fetch(API, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ fn: fn, args: args, tok: TOK }) })
     .then(r => r.json())
-    .then(r => { if (r.ok) done(r.data); else if (onErr) onErr(r.error); else toast(r.error, false); })
+    .then(r => { if (!r.ok && r.error === 'SESSION_ENDED') { logout('Logged out – this account was opened on another phone'); return; }
+      if (r.ok) done(r.data); else if (onErr) onErr(r.error); else toast(r.error, false); })
     .catch(() => toast('No internet / server not reachable', false))
     .finally(() => { if (--BUSY <= 0) { BUSY = 0; document.body.style.cursor = ''; } });
 }
@@ -293,10 +294,10 @@ function call(fn, args, done, onErr){
 /* ---- session: survives an accidental refresh; ends on Log out or after 15 minutes without any tap ---- */
 const IDLE_MS = Infinity;   // no auto logout – stays logged in until Log out is pressed
 let LAST = Date.now();
-function sesSave(){ try { localStorage.setItem('wmS', JSON.stringify({ p: PIN, t: LAST })); } catch (e) {} }
+function sesSave(){ try { localStorage.setItem('wmS', JSON.stringify({ p: PIN, t: LAST, k: TOK })); } catch (e) {} }
 function sesClear(){ try { localStorage.removeItem('wmS'); } catch (e) {} }
 function logout(msg){
-  sesClear(); PIN = '';
+  sesClear(); PIN = ''; TOK = '';
   try { if (msg) sessionStorage.setItem('wmMsg', msg); } catch (e) {}
   location.reload();
 }
@@ -309,8 +310,8 @@ setInterval(idleCheck, 30000);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) idleCheck(); });
 function doLogin(auto){
   PIN = $('pin').value.trim();
-  call('login', [PIN], r => {
-    $('pin').value = ''; LAST = Date.now(); sesSave(); $('lo').classList.remove('hidden');
+  call('login', [PIN, auto ? TOK : ''], r => {
+    TOK = r.tok || TOK; $('pin').value = ''; LAST = Date.now(); sesSave(); $('lo').classList.remove('hidden');
     $('login').classList.add('hidden');
     if (r.role === 'ADMIN') { $('adm').classList.remove('hidden'); $('hdr').textContent = 'Admin'; loadStaff(); apLoad(); let p = 'att'; try { p = localStorage.getItem('admPg') || 'att'; } catch (e) {} pg(p); }
     else { $('sup').classList.remove('hidden'); if (r.roster) render(r.roster); else refresh(); getLoc(() => {}, true); }   // ask location permission early
@@ -321,7 +322,7 @@ $('pin').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); })
   let s = null, m = '';
   try { s = JSON.parse(localStorage.getItem('wmS') || 'null'); m = sessionStorage.getItem('wmMsg') || ''; sessionStorage.removeItem('wmMsg'); } catch (e) {}
   if (m) $('hdr').textContent = m;
-  if (s && s.p && Date.now() - s.t < IDLE_MS) { $('login').classList.add('hidden'); $('hdr').textContent = 'Loading…'; $('pin').value = s.p; doLogin(true); }   // no login-screen flash on refresh
+  if (s && s.p && Date.now() - s.t < IDLE_MS) { $('login').classList.add('hidden'); $('hdr').textContent = 'Loading…'; $('pin').value = s.p; TOK = s.k || ''; doLogin(true); }   // no login-screen flash on refresh
   else sesClear();
 })();
 

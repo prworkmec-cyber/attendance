@@ -360,12 +360,12 @@ function render(d){
     const locked = !w.inT && (lv || absent);   // on leave today: no Check In, not ticked by Select all – change the dropdown to Present first
     return '<div class="card' + (locked ? ' onleave' : '') + '"><div class="row">' +
       '<input type="checkbox" class="chk" data-i="' + i + '" onchange="updBulk()"' + (locked ? ' disabled title="On leave – change to Present first"' : '') + '>' +
-      '<div class="name">' + esc(w.name) + ' ' + badge + '<button class="warnb' + (w.warn >= 5 ? ' hot' : '') + '" title="Warnings this month – tap to give a warning" onclick="warnW(' + i + ')">⚠ ' + (w.warn || 0) + '</button></div>' +
+      '<div class="name">' + esc(w.name) + ' ' + badge + '</div>' +
       (locked ? '' : '<button class="in" ' + (w.inT ? 'disabled' : '') + ' onclick="act(\'checkIn\',' + i + ')">Check In</button>') +
       '<button class="out" ' + (!w.inT || w.outT ? 'disabled' : '') + ' onclick="act(\'checkOut\',' + i + ')">Check Out</button>' +
       '<select ' + (w.inT ? 'disabled' : '') + ' onchange="abs(' + i + ',this)">' +
         '<option value="">' + (w.outT ? 'Checked out' : w.inT ? 'Active' : absent ? esc(LEAVE[w.status] || w.status) : lv ? esc(LEAVE[lv.code] || lv.code) : 'Present') + '</option>' + (locked ? '<option value="P">✓ Present – he came to work</option>' : '') + LEAVE_OPTS +
-      '</select><button class="grey sm" onclick="adv(' + i + ')">+ Advance</button>' + (lv ? '' : '<button class="grey sm" id="lvb' + i + '" onclick="lvT(' + i + ')">▸ Leave</button>') + '<button class="grey sm" style="margin-left:auto" onclick="penW(' + i + ')">⏱ Penalty</button><button class="grey sm" onclick="noteW(' + i + ')">📝 Note</button></div>' +
+      '</select><button class="grey sm" onclick="adv(' + i + ')">+ Advance</button>' + (lv ? '' : '<button class="grey sm" id="lvb' + i + '" onclick="lvT(' + i + ')">▸ Leave</button>') + '<button class="grey sm" style="margin-left:auto" onclick="penW(' + i + ')">⏱ Penalty</button><button class="grey sm" onclick="noteW(' + i + ')">📝 Note</button><button class="warnb' + (w.warn >= 5 ? ' hot' : '') + '" style="margin-left:auto" title="Warnings this month – tap to give a warning" onclick="warnW(' + i + ')">⚠ ' + (w.warn || 0) + '</button></div>' +
       (lv ? '' : '<div class="lvp" id="lvp' + i + '"><button class="grey" onclick="vac(' + i + ',\'AV\')">✈ Annual vacation</button><button class="grey" onclick="vac(' + i + ',\'EL\')">Emergency leave</button></div>') +
       (times || w.notes ? '<div class="times">' + times + (w.notes ? (times ? '<br>' : '') + '📝 ' + esc(w.notes) : '') + '</div>' : '') + '</div>';
   }).join('');

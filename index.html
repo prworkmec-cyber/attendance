@@ -155,7 +155,7 @@
     </div></div>
     <div class="card" data-pg="att" id="attOne">
       <b>Admin attendance – add / correct (no location check)</b>
-      <div class="hint">For outside work, missed punches or disputes. Saved as "Admin" with your note. Night shift: times after midnight (e.g. 04:00) count on the next morning.</div>
+      <div class="hint">For outside work, missed punches or disputes. Saved under your admin name with your note. Night shift: times after midnight (e.g. 04:00) count on the next morning.</div>
       <select id="aWorker" style="width:100%" onchange="aLoad()"></select>
       <label style="display:block;margin-top:8px">Date<br><input id="aDate" type="date" style="width:100%" onchange="aLoad()"></label>
       <div class="row" style="margin-top:8px">
@@ -356,7 +356,7 @@ function doLogin(auto){
   call('login', [PIN, auto ? TOK : ''], r => {
     TOK = r.tok || TOK; $('pin').value = ''; LAST = Date.now(); sesSave(); $('lo').classList.remove('hidden');
     $('login').classList.add('hidden');
-    if (r.role === 'ADMIN') { $('adm').classList.remove('hidden'); $('hdr').textContent = 'Admin'; loadStaff(); apLoad(); let p = 'att'; try { p = localStorage.getItem('admPg') || 'att'; } catch (e) {} pg(p); }
+    if (r.role === 'ADMIN') { $('adm').classList.remove('hidden'); $('hdr').textContent = r.name || 'Admin'; loadStaff(); apLoad(); let p = 'att'; try { p = localStorage.getItem('admPg') || 'att'; } catch (e) {} pg(p); }
     else { $('sup').classList.remove('hidden'); if (r.roster) render(r.roster); else refresh(); getLoc(() => {}, true); }   // ask location permission early
   }, e => { PIN = ''; $('login').classList.remove('hidden'); $('hdr').textContent = 'Enter your password'; if (auto) { sesClear(); $('pin').value = ''; } toast(e, false); });
 }

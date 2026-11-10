@@ -397,7 +397,7 @@ function secDraw(d){
   $('sPn').textContent = ps.length ? ps.length + ' today' : 'none today';
   $('pnS').innerHTML = (!ps.length ? '<div class="hint">No penalties today.</div>' : ps.map(x => '<div class="it"><b>' + esc(x.w.name) + '</b> · <b style="color:#C62828">−' + esc(x.w.pen) + ' h</b> <button class="grey sm" onclick="penDel(' + x.i + ')">Remove</button></div>').join('')) +
     '<div class="hint" style="margin-top:6px">To give a penalty, tap ⏱ Penalty on the worker\'s card.</div>';
-  tkDraw(d.tasks || [], d.today, false);
+  TG_ON = !!d.tg; tkDraw(d.tasks || [], d.today, false);
 }
 /* ---- tasks: admin gives, supervisor replies; Gantt timeline for both ---- */
 const TST = { 'Not started': 't-ns', 'In progress': 't-ip', 'Done': 't-dn', 'Blocked': 't-bl', 'Cancelled': 't-cx' };
@@ -429,12 +429,23 @@ function tkDraw(ts, today, admin){
           '<input id="tkR' + k + '" placeholder="Reply / update" maxlength="800" style="flex:1;min-width:140px"><button class="pri sm" onclick="tkUpd(' + k + ')">Send</button>' +
           (admin ? '<button class="grey sm" onclick="tkEdit(' + k + ')">Edit</button><button class="grey sm" onclick="tkCancel(' + k + ')">Cancel task</button>' : '') + '</div>') + '</div>';
     }).join(''));
-  if (admin) $('tkA').innerHTML = html;
-  else { $('tkS').innerHTML = html; $('sTk').innerHTML = open.length + ' open' + (od ? ' <b>' + od + ' overdue</b>' : ''); }
+  const tgBox = '<div class="row" style="margin-bottom:8px;font-size:14px">🔔 Phone ring: ' + (TG_ON ? '<b style="color:#2E7D32">connected ✓</b> <button class="grey sm" onclick="tgTest()">Test</button>' : '<b style="color:#C62828">not connected</b>') +
+    ' <button class="grey sm" onclick="tgConnect()">' + (TG_ON ? 'Reconnect' : 'Connect') + '</button></div>';
+  if (admin) $('tkA').innerHTML = tgBox + html;
+  else { $('tkS').innerHTML = tgBox + html; $('sTk').innerHTML = open.length + ' open' + (od ? ' <b>' + od + ' overdue</b>' : ''); }
 }
+let TG_ON = false;
+/** Link this phone's Telegram to the bot: open the bot, press Start, come back. */
+function tgConnect(){
+  call('tgLink', [PIN], r => ask({ title: '🔔 Connect phone ring', yes: 'I pressed Start', names: [],
+      en: '1. Tap the button below – Telegram opens.\n2. Press START in the bot.\n3. Come back here and tap "I pressed Start".',
+      html: '<a href="' + esc(r.url) + '" target="_blank" style="display:block;text-align:center;background:#229ED9;color:#fff;font-weight:bold;padding:12px;border-radius:8px;margin:10px 0;text-decoration:none">Open Telegram (@' + esc(r.bot) + ')</a>' },
+    () => call('tgCheck', [PIN], c => { TG_ON = c.linked; toast(c.linked ? 'Connected – task alerts will ring on this phone' : 'Not connected yet – press START in Telegram, then try again', c.linked); if (window._tkAdm) tkLoad(); else refresh(); })));
+}
+function tgTest(){ call('tgTest', [PIN], m => toast(m, true)); }
 function tkRes(r){ if (r.admin) tkAdmin(r); else { window._d.tasks = r.tasks; tkDraw(r.tasks, r.today, false); } }
 function tkAdmin(r){
-  window._sups = r.sups;
+  window._sups = r.sups; window._tkAdm = true; TG_ON = !!r.tg;
   if (!$('tkTo').dataset.done) { $('tkTo').innerHTML = r.sups.map(n => '<label style="display:inline-block;margin-right:12px"><input type="checkbox" class="tkTo" value="' + esc(n) + '"> ' + esc(n) + '</label>').join(''); $('tkTo').dataset.done = 1; }
   if (!$('tkStart').value) { $('tkStart').value = r.today; $('tkDue').value = r.today; }
   tkDraw(r.tasks, r.today, true);
@@ -688,6 +699,7 @@ function wlShow(L){
         (L.sig ? '<div class="sgx"><img src="' + L.sig + '" alt="signature" style="max-width:100%"></div><div style="font-size:12px">' + esc(L.name) + '</div>'
                : '<div class="sgx" style="color:#C62828;font-weight:700;text-align:center;padding:6px">' + esc(L.ack || 'Not signed') + '</div>') +
       '</div></div>' +
+    (L.pdf ? '<div class="noprint" style="margin-top:10px"><a href="' + esc(L.pdf) + '" target="_blank">📁 PDF copy in Google Drive</a></div>' : '') +
     '<div class="btns noprint"><button class="grey" onclick="$(\'wlM\').style.display=\'none\'">Close</button><button class="pri" onclick="window.print()">🖨 Print / PDF</button></div>';
   $('wlM').style.display = 'flex';
 }

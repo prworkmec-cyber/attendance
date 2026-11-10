@@ -280,7 +280,7 @@ function call(fn, args, done, onErr){
 }
 
 /* ---- session: survives an accidental refresh; ends on Log out or after 15 minutes without any tap ---- */
-const IDLE_MS = 15 * 60 * 1000;
+const IDLE_MS = Infinity;   // no auto logout – stays logged in until Log out is pressed
 let LAST = Date.now();
 function sesSave(){ try { localStorage.setItem('wmS', JSON.stringify({ p: PIN, t: LAST })); } catch (e) {} }
 function sesClear(){ try { localStorage.removeItem('wmS'); } catch (e) {} }

@@ -60,6 +60,13 @@
   .lvp{display:none;width:100%;gap:6px;margin-top:6px} .lvp.open{display:flex} .lvp button{flex:1}
   .tabs button.on{background:var(--blue);color:#fff}
   #sigM{z-index:60} #sigM label{display:block;padding:5px 0} #modal h3.warnh{color:var(--red)}
+  #wlM{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;z-index:56;padding:16px}
+  #wlM .box{background:#fff;border-radius:12px;max-width:620px;width:100%;max-height:90vh;overflow:auto;padding:22px;color:#111;font-size:14px;line-height:1.5}
+  #wlM .lt{display:flex;justify-content:space-between;gap:8px;font-size:13px;margin:6px 0 12px} #wlM .sub{font-weight:700;text-decoration:underline;margin:10px 0}
+  #wlM .wd{position:relative;border:2px solid #C62828;color:#C62828;font-weight:700;padding:6px;text-align:center;margin:8px 0}
+  #wlM .sgx{border:1px solid #999;border-radius:6px;min-height:70px;display:flex;align-items:center;justify-content:center;background:#fff;max-width:300px}
+  @media print{ body *{visibility:hidden} #wlM,#wlM *{visibility:visible} #wlM{position:absolute;inset:0;display:block;background:none;padding:0}
+    #wlM .box{max-height:none;overflow:visible;border-radius:0;box-shadow:none;max-width:none;padding:10mm} #wlM .noprint{display:none!important} }
   #mEn{font-size:15px;line-height:1.5}
   .ur{direction:rtl;text-align:right;font-family:'Noto Nastaliq Urdu',serif;font-size:18px;line-height:2.1;background:#F1F5F9;border-radius:8px;padding:6px 12px;margin:10px 0}
   #mNames{font-size:13px;color:var(--muted);margin:6px 0}
@@ -249,9 +256,11 @@
   <div id="docB"></div>
 </div>
 <input id="docCam" type="file" accept="image/*" capture="environment" style="display:none" onchange="docTake(this)">
+<div id="wlM"><div class="box" id="wlB"></div></div>
 <div id="sigM"><div class="box">
-  <h3>Leave salary – signature</h3>
+  <h3 id="sigH">Leave salary – signature</h3>
   <div id="sigTxt" style="margin-bottom:8px"></div>
+  <div id="sigRcv">
   <label><input type="radio" name="rcv" value="W" checked onchange="$('sigOther').style.display='none';$('sigPh').style.display='none'"> Received by the worker himself</label>
   <label><input type="radio" name="rcv" value="O" onchange="$('sigOther').style.display='';$('sigPh').style.display=''"> Received by someone else (e.g. supervisor)</label>
   <input id="sigOther" placeholder="Name of the person who received it" style="width:100%;display:none;margin:4px 0">
@@ -259,7 +268,8 @@
     <label class="grey" style="display:inline-block;padding:10px 14px;border-radius:8px;background:#6B7280;color:#fff;font-weight:600;cursor:pointer">📷 Take photo of this person<input id="sigCam" type="file" accept="image/*" capture="environment" style="display:none" onchange="phTake(this)"></label>
     <img id="sigPhImg" alt="" style="display:none;max-width:120px;max-height:120px;border-radius:8px;margin-left:8px;vertical-align:middle">
   </div>
-  <div class="hint">The person who received the money signs below:</div>
+  </div>
+  <div class="hint" id="sigHint">The person who received the money signs below:</div>
   <canvas id="sigPad" width="600" height="260" style="width:100%;border:2px dashed #9CA3AF;border-radius:8px;touch-action:none;background:#fff"></canvas>
   <div class="btns"><button class="grey" onclick="sigClear()">Clear</button><button id="sigSkip" class="grey">No signature</button><button id="sigNo" class="grey">Cancel</button><button id="sigYes" class="pri">Save</button></div>
 </div></div>
@@ -516,8 +526,43 @@ function warnW(i){
   const w = window._list[i], n = (w.warn || 0) + 1, cut = n % 6 === 0;
   ask({ title: '⚠ Give warning', names: [w.name], yes: 'Give warning ' + n, warn: true, txt: 'Reason (required)', txtReq: true, txtMsg: 'Write the reason',
         en: w.name + ' has ' + (w.warn || 0) + ' warning(s) this month.\n' + (cut ? 'This is warning ' + n + ': 4 HOURS will be deducted from his basic hours today.' : 'This will be warning ' + n + '. At 6 warnings in a month, 4 hours are deducted from basic hours.') },
-    f => call('addWarning', [PIN, w.name, f.txt], d => { render(d); toast(w.name + ': warning ' + n + (cut ? ' – 4 h deducted' : ''), true); }));
+    f => warnSign(w.name, n, f.txt, sig => call('addWarning', [PIN, w.name, f.txt, sig], d => { render(d); toast(w.name + ': warning ' + n + (cut ? ' – 4 h deducted' : ''), true); if (d.letter) wlShow(d.letter); })));
 }
+/** Worker signs to acknowledge the warning; "Refused to sign" is recorded with the giver as witness. */
+function warnSign(name, n, why, go){
+  sign({ worker: name, noRcv: true, optional: true, skipText: 'Refused to sign', title: '⚠ Warning ' + n + ' – acknowledgement',
+         hint: name + ' signs below to acknowledge this warning:', text: 'Reason: ' + why }, s => {
+    if (s.sig) { go(s.sig); return; }
+    ask({ title: 'Refused to sign', names: [name], yes: 'Yes, he refused', warn: true, en: 'Record that ' + name + ' REFUSED to sign this warning?\nYou are recorded as the witness.' }, () => go(''));
+  });
+}
+/** Official warning letter – printable / Save as PDF. */
+function wlShow(L){
+  const mon = new Date(L.ds + 'T12:00:00').toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
+  const ord = n => n + (n % 100 >= 11 && n % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] || 'th');
+  $('wlB').innerHTML =
+    '<img src="logo.png" alt="WORKMEC" style="display:block;max-width:220px;margin:0 auto 6px">' +
+    '<h2 style="text-align:center;margin:6px 0;letter-spacing:2px">WARNING LETTER</h2>' +
+    '<div class="lt"><span>Ref: <b>' + esc(L.no || L.id) + '</b></span><span>Date: <b>' + esc(L.at) + '</b></span></div>' +
+    (L.removed ? '<div class="wd">WITHDRAWN – ' + esc(L.removed) + '</div>' : '') +
+    '<div>To: <b>' + esc(L.name) + '</b>' + (L.shift ? ' · ' + esc(L.shift) + ' shift' : '') + '</div>' +
+    '<div class="sub">Subject: ' + ord(L.n) + ' warning – ' + esc(mon) + '</div>' +
+    '<p>This letter is a formal warning issued to you regarding the following:</p>' +
+    '<p style="border-left:3px solid #C62828;padding:4px 10px;background:#FFF5F5"><b>' + esc(L.reason) + '</b></p>' +
+    '<p>This is your <b>' + ord(L.n) + '</b> warning in ' + esc(mon) + ' (shift date ' + esc(niceD(L.ds)) + ').' +
+    (L.cut ? ' As this is your ' + ord(L.n) + ' warning this month, <b>4 (four) hours have been deducted</b> from your basic hours for ' + esc(niceD(L.ds)) + ', as per company policy.'
+           : ' On the 6th warning in a month, 4 hours are deducted from basic hours.') + '</p>' +
+    '<p>You are required to correct this immediately. Repeated violations will lead to further disciplinary action.</p>' +
+    '<div style="display:flex;flex-wrap:wrap;gap:24px;margin-top:18px">' +
+      '<div style="flex:1;min-width:200px"><div class="hint">Issued by</div><b>' + esc(L.by) + '</b><br>WORKMEC</div>' +
+      '<div style="flex:1;min-width:200px"><div class="hint">Employee acknowledgement</div>' +
+        (L.sig ? '<div class="sgx"><img src="' + L.sig + '" alt="signature" style="max-width:100%"></div><div style="font-size:12px">' + esc(L.name) + '</div>'
+               : '<div class="sgx" style="color:#C62828;font-weight:700;text-align:center;padding:6px">' + esc(L.ack || 'Not signed') + '</div>') +
+      '</div></div>' +
+    '<div class="btns noprint"><button class="grey" onclick="$(\'wlM\').style.display=\'none\'">Close</button><button class="pri" onclick="window.print()">🖨 Print / PDF</button></div>';
+  $('wlM').style.display = 'flex';
+}
+function wlOpen(id){ call('getWarningLetter', [PIN, id], wlShow); }
 /** Quick note – added to today's Daily Log row as a fixed record. */
 function noteW(i){
   const w = window._list[i];
@@ -650,6 +695,10 @@ function lsSave(name){
 let SIG_DIRTY = false;
 function sign(o, done, cancel){
   $('sigTxt').textContent = o.text;
+  $('sigH').textContent = o.title || 'Leave salary – signature';
+  $('sigHint').textContent = o.hint || 'The person who received the money signs below:';
+  $('sigRcv').style.display = o.noRcv ? 'none' : '';
+  $('sigSkip').textContent = o.skipText || 'No signature';
   document.querySelector('input[name=rcv][value=W]').checked = true; $('sigOther').style.display = 'none'; $('sigOther').value = '';
   PHOTO = ''; $('sigPh').style.display = 'none'; $('sigPhImg').style.display = 'none'; $('sigCam').value = '';
   $('sigSkip').style.display = o.optional ? '' : 'none';
@@ -796,7 +845,8 @@ function wnDraw(l){
     const ws = by[n], c = ws.filter(w => w.type === 'W').length;
     return '<div style="padding:8px 0;border-bottom:1px solid var(--line)"><b>' + esc(n) + '</b> · <span class="warnb' + (c >= 5 ? ' hot' : '') + '">⚠ ' + c + '</span>' +
       ws.map(w => '<div style="margin-top:4px">' + (w.type === 'P' ? '<b style="color:#C62828">−4 h</b> ' + niceD(w.ds) + ' · ' + esc(w.reason)
-        : niceD(w.ds) + ' · ' + esc(w.reason) + ' · by ' + esc(w.by) + ' <button class="grey sm" onclick="wnDel(\'' + esc(w.id) + '\')">Remove</button>') + '</div>').join('') + '</div>';
+        : niceD(w.ds) + ' · ' + esc(w.reason) + ' · by ' + esc(w.by) + (w.signed ? ' · ✍ signed' : w.refused ? ' · <b style="color:#C62828">refused to sign</b>' : '') +
+          ' <button class="grey sm" onclick="wlOpen(\'' + esc(w.id) + '\')">📄 Letter</button> <button class="grey sm" onclick="wnDel(\'' + esc(w.id) + '\')">Remove</button>') + '</div>').join('') + '</div>';
   }).join('');
 }
 function wnCount(n){ return (window._wn || []).filter(w => w.name === n && w.type === 'W').length; }
@@ -808,7 +858,7 @@ function wnGive(){
   const n = wnCount(name) + 1, cut = n % 6 === 0;
   ask({ title: '⚠ Give warning', names: [name], yes: 'Give warning ' + n, warn: true,
         en: (cut ? 'This is warning ' + n + ' this month: 4 HOURS will be deducted from his basic hours today.' : 'This will be warning ' + n + ' this month.') + '\nReason: ' + why },
-    () => call('addWarning', [PIN, name, why], m => { toast(m, true); $('wnReason').value = ''; wnLoad(); }));
+    () => warnSign(name, n, why, sig => call('addWarning', [PIN, name, why, sig], m => { toast(m.msg, true); $('wnReason').value = ''; wnLoad(); wlShow(m.letter); })));
 }
 function wnDel(id){
   const w = window._wn.find(x => x.id === id);

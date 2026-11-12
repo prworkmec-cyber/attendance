@@ -476,12 +476,32 @@ function hrList(r){
   $('hrL').innerHTML = '<table class="hrt" style="width:100%"><tr><th>Worker</th><th class="r">Days</th><th class="r">OT h</th><th class="r">Gross</th></tr>' +
     rows.map(x => (x.shift !== g ? (g = x.shift, '<tr><td colspan="4" style="font-weight:bold;color:var(--blue);padding-top:12px">' + esc(x.shift) + ' SHIFT</td></tr>') : '') +
       '<tr class="w" onclick="hrOpen(\'' + esc(x.name).replace(/'/g, "\\'") + '\')"><td>' + esc(x.name) + (x.ded ? ' <span class="hint">−' + x.ded + '</span>' : '') + (x.bonus ? ' <span class="hint" style="color:#2E7D32">+' + x.bonus + '</span>' : '') + '</td><td class="r">' + x.days + '</td><td class="r">' + x.ot + '</td><td class="r"><b>' + hrAed(x.gross) + '</b></td></tr>').join('') +
-    '<tr><td colspan="3"><b>Total (' + r.rows.length + ' workers)</b></td><td class="r"><b>' + hrAed(r.total) + '</b></td></tr></table>';
+    '<tr><td colspan="3"><b>Total (' + r.rows.length + ' workers)</b></td><td class="r"><b>' + hrAed(r.total) + '</b></td></tr>' +
+    (r.mg && r.mg.length ? '<tr><td colspan="4" style="font-weight:bold;color:var(--blue);padding-top:16px">MANAGEMENT <span class="hint">(full month, no attendance)</span></td></tr>' +
+      r.mg.map(x => '<tr class="w" onclick="hrMgOpen(\'' + esc(x.key) + '\')"><td>' + esc(x.name) + (x.ded ? ' <span class="hint">−' + x.ded + '</span>' : '') + (x.bonus ? ' <span class="hint" style="color:#2E7D32">+' + x.bonus + '</span>' : '') + '</td><td class="r">–</td><td class="r">–</td><td class="r"><b>' + hrAed(x.gross) + '</b></td></tr>').join('') +
+      '<tr><td colspan="3"><b>Total management</b></td><td class="r"><b>' + hrAed(r.mgTotal) + '</b></td></tr>' : '') + '</table>';
+}
+function hrMgOpen(key){ call('hrMgSlip', [PIN, key], hrDraw); }
+function hrMgDraw(s){
+  const line = (a, b) => '<tr><td>' + a + '</td><td>' + b + '</td></tr>';
+  $('hrB').innerHTML =
+    '<div class="row" style="margin-bottom:6px"><button class="grey sm" onclick="hrClose()">← Back</button><b style="flex:1;font-size:17px">' + esc(s.name) + '</b><span class="hint">' + esc(s.label) + '</span></div>' +
+    '<div class="card"><div>' + esc(s.key) + ' · Management</div><div class="hint">Paid the full month – no attendance. Figures go to the Salary Statement (Master Sheet and Salary Index).</div>' +
+      '<table class="mt" style="width:100%;margin-top:6px">' + line('Basic', hrAed(s.basic)) + line('Food allowance', hrAed(s.food)) + line('Other allowance', hrAed(s.other)) + line('Fuel allowance', hrAed(s.fuel)) + line('Transport allowance', hrAed(s.transport)) +
+      line('Bonus / benefit', '<span style="color:#2E7D32">' + hrAed(s.bonus) + '</span>') + '<tr><td><b>Gross</b></td><td><b>' + hrAed(s.gross) + '</b></td></tr>' +
+      line('Deduction', '<span style="color:#C62828">−' + hrAed(s.ded) + '</span>') + '<tr><td><b>Payable</b></td><td><b>' + hrAed(s.net) + '</b></td></tr></table>' +
+      (s.adj.length ? '<div style="margin-top:6px">' + s.adj.map(a => '<div class="it">' + (a.type === 'Bonus' ? '➕ ' : '➖ ') + hrAed(a.amt) + ' – ' + esc(a.note) + ' <span class="hint">(' + esc(a.by) + ')</span> <button class="grey sm" onclick="hrAdjDel(\'' + esc(a.id) + '\')">Remove</button></div>').join('') + '</div>' : '') +
+      '<div class="row" style="margin-top:8px"><button class="in sm" onclick="hrAdj(\'Bonus\')">+ Bonus / benefit</button><button class="out sm" onclick="hrAdj(\'Deduction\')">+ Deduction</button></div></div>' +
+    '<div class="card"><b>Salary &amp; increments</b>' +
+      (s.inc.length ? s.inc.map(x => '<div class="it">' + esc(x.m) + ': basic ' + x.basic + ' · food ' + x.food + ' · other ' + x.other + ' · fuel ' + x.fuel + ' · transport ' + x.transport + ' <span class="hint">' + esc(x.note) + '</span></div>').join('') : '') +
+      '<button class="pri sm" style="margin-top:8px" onclick="hrInc()">+ New salary / increment</button></div>';
+  $('hrM').style.display = 'block'; $('hrM').scrollTop = 0;
 }
 function hrOpen(name){ call('hrSlip', [PIN, name], hrDraw); }
 function hrClose(){ $('hrM').style.display = 'none'; hrLoad(); }
 function hrDraw(s){
   window._hs = s;
+  if (s.mg) return hrMgDraw(s);
   const first = new Date(s.month + '-01T12:00:00').getDay(), cells = [];
   for (let k = 0; k < first; k++) cells.push('<div></div>');
   s.days.forEach((d, i) => {
@@ -523,15 +543,24 @@ function hrAdj(type){
   ask({ title: (type === 'Bonus' ? 'Bonus / benefit' : 'Deduction') + ' – ' + s.label, names: [s.name], yes: 'Add',
         html: '<input id="haA" type="number" inputmode="decimal" placeholder="Amount (AED)" style="width:100%;margin:4px 0"><input id="haN" placeholder="What is it for? (required)" style="width:100%;margin:4px 0">',
         en: type === 'Bonus' ? 'Paid only in ' + s.label + '.' : 'Deducted only in ' + s.label + ' (advances and loan instalments are added automatically).' },
-    () => call('hrAddAdjust', [PIN, s.name, type, $('haA').value, $('haN').value], x => { hrDraw(x); toast('Saved', true); }));
+    () => call(s.mg ? 'hrMgAddAdjust' : 'hrAddAdjust', [PIN, s.mg ? s.key : s.name, type, $('haA').value, $('haN').value], x => { hrDraw(x); toast('Saved', true); }));
 }
 function hrAdjDel(id){
   const s = window._hs, a = s.adj.find(x => x.id === id);
   ask({ title: 'Remove ' + (a.type === 'Bonus' ? 'bonus' : 'deduction'), warn: true, names: [s.name], yes: 'Remove', en: hrAed(a.amt) + ' – ' + a.note + '\nThe removal is recorded.' },
-    () => call('hrDelAdjust', [PIN, s.name, id], x => { hrDraw(x); toast('Removed', true); }));
+    () => call(s.mg ? 'hrMgDelAdjust' : 'hrDelAdjust', [PIN, s.mg ? s.key : s.name, id], x => { hrDraw(x); toast('Removed', true); }));
 }
 function hrInc(){
   const s = window._hs, c = s.cur || { basic: s.basic, food: s.food, other: s.other };
+  if (s.mg) {
+    const f = (id, l, v) => '<label style="flex:1">' + l + '<br><input id="' + id + '" type="number" inputmode="decimal" value="' + v + '" style="width:100%"></label>';
+    return ask({ title: 'New salary – ' + s.name, yes: 'Save', en: 'Monthly amounts from the chosen month on. Also written to the increment table in the Salary Index.',
+        html: '<label>Starts from month<br><input id="hiM" type="month" value="' + s.month + '" style="width:100%"></label>' +
+              '<div class="row" style="margin-top:6px">' + f('hiB', 'Basic', s.basic) + f('hiF', 'Food', s.food) + f('hiO', 'Other', s.other) + '</div>' +
+              '<div class="row" style="margin-top:6px">' + f('hiU', 'Fuel', s.fuel) + f('hiT', 'Transport', s.transport) + '</div>' +
+              '<input id="hiN" placeholder="Note (e.g. yearly increment)" style="width:100%;margin-top:6px">' },
+      () => call('hrMgIncrement', [PIN, s.key, $('hiM').value, $('hiB').value, $('hiF').value || 0, $('hiO').value || 0, $('hiT').value || 0, $('hiU').value || 0, $('hiN').value], x => { hrDraw(x); toast('Salary saved', true); }));
+  }
   ask({ title: 'New salary – ' + s.name, yes: 'Save', en: 'From the chosen month on, every payslip uses these amounts (monthly figures).',
         html: '<label>Starts from month<br><input id="hiM" type="month" value="' + s.month + '" style="width:100%"></label>' +
               '<div class="row" style="margin-top:6px"><label style="flex:1">Basic<br><input id="hiB" type="number" inputmode="decimal" value="' + (s.cur ? c.basic : s.basic) + '" style="width:100%"></label><label style="flex:1">Food<br><input id="hiF" type="number" inputmode="decimal" value="' + (s.cur ? c.food : s.foodM) + '" style="width:100%"></label><label style="flex:1">Other<br><input id="hiO" type="number" inputmode="decimal" value="' + (s.cur ? c.other : s.otherM) + '" style="width:100%"></label></div>' +

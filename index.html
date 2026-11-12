@@ -1325,9 +1325,8 @@ function tog(i){
   const r = window._staff[i];
   if (!r.active) { ask({ title: 'Restore worker', en: 'Restore ' + r.name + '?' + (r.tabOk ? '' : '\nHis payslip was deleted – use "Create payslip" after restoring.') }, () => call('setActive', [PIN, r.name, true], drawStaff)); return; }
   ask({ title: 'Remove worker', warn: true, names: [r.name], yes: 'Remove',
-        en: 'Remove ' + r.name + ' from the staff list?' + (r.tabOk ? '\nHis attendance stays in the Daily Log.' : ''),
-        html: r.tabOk ? '<label style="display:block;margin:8px 0;color:#C62828;font-weight:bold"><input type="checkbox" id="delSlip"> Also DELETE his payslip tab "' + esc(r.tab) + '" (cannot be undone)</label>' : '' },
-    () => call('setActive', [PIN, r.name, false, !!($('delSlip') && $('delSlip').checked)], drawStaff));
+        en: 'Remove ' + r.name + ' from the staff list?\nHis payslip is saved to Google Drive (Excel), then removed from the sheet and from the Salary Statement.\nHis attendance stays in the Daily Log.' },
+    () => call('setActive', [PIN, r.name, false, true], drawStaff));
 }
 function chShift(i, sel){
   const r = window._staff[i], to = sel.value;

@@ -609,7 +609,7 @@ function render(d){
   const pe = $('pend'), pl0 = d.pending || [];
   window._pend = pl0;
   if (pl0.length) { pe.innerHTML = '<b>⏳ Waiting for admin approval (' + pl0.length + ')</b>' + pl0.map((p, k) => '<div style="padding:6px 0;border-bottom:1px solid var(--line)">' + esc(p.name) + ' – ' + esc(LEAVE[p.code] || p.code) + ' (' + niceD(p.from) + (p.days > 1 ? ' – ' + niceD(p.to) : '') + ')' +
-      '<div class="row" style="margin-top:4px"><button class="grey sm" onclick="docAdd(window._pend[' + k + '])">📄 Add certificate</button>' + (p.docs ? '<button class="grey sm" onclick="docView(window._pend[' + k + '],true)">View (' + p.docs + ')</button>' : '<span class="hint">no document yet</span>') + '</div></div>').join('') +
+      '<div class="row" style="margin-top:4px"><button class="grey sm" onclick="docAdd(window._pend[' + k + '])">📎 Upload document</button>' + (p.docs ? '<button class="grey sm" onclick="docView(window._pend[' + k + '],true)">View (' + p.docs + ')</button>' : '<span class="hint">no document yet</span>') + '</div></div>').join('') +
       '<div class="hint">Take a photo of the medical certificate / proof. Remind admin to approve.</div>'; pe.classList.remove('hidden'); }
   else pe.classList.add('hidden');
   secDraw(d);
@@ -641,7 +641,7 @@ function render(d){
       '<select ' + (w.inT ? 'disabled' : '') + ' onchange="abs(' + i + ',this)">' +
         '<option value="">' + (w.outT ? 'Checked out' : w.inT ? 'Active' : absent ? esc(LEAVE[w.status] || w.status) : lv ? esc(LEAVE[lv.code] || lv.code) : 'Present') + '</option>' + (locked ? '<option value="P">✓ Present – he came to work</option>' : '') + LEAVE_OPTS +
       '</select><button class="grey sm" onclick="adv(' + i + ')">+ Advance</button>' + (lv ? '' : '<button class="grey sm" id="lvb' + i + '" onclick="lvT(' + i + ')">▸ Leave</button>') + '<button class="grey sm" style="margin-left:auto" onclick="penW(' + i + ')">⏱ Penalty</button><button class="grey sm" onclick="noteW(' + i + ')">📝 Note</button><button class="warnb' + (w.warn >= 5 ? ' hot' : '') + '" style="margin-left:auto" title="Warnings this month – tap to give a warning" onclick="warnW(' + i + ')">⚠ ' + (w.warn || 0) + '</button></div>' +
-      (window._pend || []).map((p, k) => p.name === w.name && (p.code === 'SL' || p.code === 'EO') ? '<div class="certb">⏳ ' + esc(LEAVE[p.code]) + ' ' + niceD(p.from) + (p.days > 1 ? '–' + niceD(p.to) : '') + ' waiting for admin · <button class="grey sm" onclick="docAdd(window._pend[' + k + '])">📷 ' + (p.docs ? 'Add page (' + p.docs + ' saved)' : 'Take medical certificate photo') + '</button></div>' : '').join('') +
+      (window._pend || []).map((p, k) => p.name === w.name ? '<div class="certb">⏳ ' + esc(LEAVE[p.code]) + ' ' + niceD(p.from) + (p.days > 1 ? '–' + niceD(p.to) : '') + ' waiting for admin · <button class="grey sm" onclick="docAdd(window._pend[' + k + '])">📎 ' + (p.docs ? 'Add page (' + p.docs + ' saved)' : 'Upload supporting document') + '</button></div>' : '').join('') +
       (lv ? '' : '<div class="lvp" id="lvp' + i + '"><button class="grey" onclick="vac(' + i + ',\'AV\')">✈ Annual vacation</button><button class="grey" onclick="vac(' + i + ',\'EL\')">Emergency leave</button></div>') +
       (times || w.notes ? '<div class="times">' + times + (w.notes ? (times ? '<br>' : '') + '📝 ' + esc(w.notes) : '') + '</div>' : '') + '</div>';
   }).join('');
@@ -672,7 +672,7 @@ function ask(o, onYes, onNo){
   $('mPen').style.display = o.pen ? '' : 'none'; $('mPenH').value = '1';
   $('mBrk').style.display = o.brk ? '' : 'none'; document.querySelectorAll('input[name=brk]').forEach(r => r.checked = false);
   $('mNames').textContent = o.names && o.names.length ? o.names.join(' · ') : '';
-  $('mYes').textContent = o.yes || 'Yes'; $('mYes').className = o.warn ? 'out' : 'pri';
+  $('mYes').textContent = o.yes || 'Yes'; $('mYes').className = o.warn ? 'out' : 'pri'; $('mYes').style.display = o.noYes ? 'none' : '';
   const close = () => { $('modal').style.display = 'none'; };
   $('mYes').onclick = () => {
     let f = null;
@@ -1051,7 +1051,7 @@ function apDraw(res){
   $('apList').innerHTML = !window._ap.length ? '<div class="hint">Nothing waiting. ✓</div>' : window._ap.map((p, k) =>
     '<div style="padding:8px 0;border-bottom:1px solid var(--line)"><b>' + esc(p.name) + '</b> · ' + esc(LEAVE[p.code] || p.code) + ' · ' + p.shift + (p.why ? '<br><span class="hint">' + esc(p.why) + '</span>' : '') +
     '<br>' + niceD(p.from) + (p.days > 1 ? ' – ' + niceD(p.to) + ' (' + p.days + ' days)' : '') + ' · marked by ' + esc(p.by) +
-    '<div class="row" style="margin-top:6px">' + (p.docs ? '<button class="pri sm" onclick="docView(window._ap[' + k + '],true)">📄 View certificate (' + p.docs + ')</button>' : '<span class="due">No certificate yet</span>') + '<button class="grey sm" onclick="docAdd(window._ap[' + k + '])">📷 Add</button></div>' +
+    '<div class="row" style="margin-top:6px">' + (p.docs ? '<button class="pri sm" onclick="docView(window._ap[' + k + '],true)">📄 View certificate (' + p.docs + ')</button>' : '<span class="due">No certificate yet</span>') + '<button class="grey sm" onclick="docAdd(window._ap[' + k + '])">📎 Upload</button></div>' +
     '<input id="apN' + k + '" placeholder="Note (optional) – e.g. medical certificate seen" style="width:100%;margin-top:6px">' +
     '<div class="row" style="margin-top:6px"><button class="in" style="flex:1" onclick="apDo(' + k + ',\'Approved\')">✓ Approve (paid)</button><button class="out" style="flex:1" onclick="apDo(' + k + ',\'Unpaid\')">Mark unpaid</button></div></div>').join('') +
     (window._apDone.length ? '<div style="margin-top:14px"><b>Decided this month</b> <span class="hint">– tap to change; list starts fresh each month</span>' + window._apDone.map((p, k) => '<div style="padding:5px 0;border-bottom:1px solid var(--line)">' + esc(p.name) + ' · ' + esc(LEAVE[p.code] || p.code) + ' · ' + niceD(p.from) + (p.days > 1 ? ' – ' + niceD(p.to) : '') +
@@ -1066,14 +1066,23 @@ function apChg(k){
 }
 /* ---- leave certificates: photo kept in the sheet (hidden tab DOCUMENTS) ---- */
 let DOC_FOR = null;
-function docAdd(p){ DOC_FOR = p; $('docCam').value = ''; $('docCam').click(); }
+/** Two buttons: camera or gallery/files (onchange = handler name). */
+const upBtns = fn => ['<label style="flex:1;text-align:center;padding:12px;border-radius:8px;background:#1F4E78;color:#fff;font-weight:bold;cursor:pointer">📷 Camera<input type="file" accept="image/*" capture="environment" style="display:none" onchange="' + fn + '(this)"></label>',
+  '<label style="flex:1;text-align:center;padding:12px;border-radius:8px;background:#6B7280;color:#fff;font-weight:bold;cursor:pointer">🖼️ Gallery<input type="file" accept="image/*" style="display:none" onchange="' + fn + '(this)"></label>'].join('');
+function docAdd(p){
+  DOC_FOR = p;
+  ask({ title: '📎 Upload supporting document', names: [p.name], noYes: true,
+        en: (LEAVE[p.code] || p.code) + ' ' + niceD(p.from) + (p.days > 1 ? '–' + niceD(p.to) : '') + '\nTake a photo with the camera, or choose one from the gallery.',
+        html: '<div class="row" style="margin:8px 0">' + upBtns('docPick') + '</div>' });
+}
+function docPick(inp){ $('modal').style.display = 'none'; docTake(inp); }
 /** 🤒 Sick: one tap marks sick leave (admin approves); certificate photo now or later. */
 let SICK_IMG = '';
 function sickW(i){
   const w = window._list[i]; SICK_IMG = '';
   ask({ title: '🤒 Sick leave', names: [w.name], yes: 'Mark sick',
-        en: 'Mark ' + w.name + ' SICK today? Admin approves it as paid or unpaid.\nIf he has a medical certificate, take a photo now – or later, when he brings it (button on his card).',
-        html: '<label class="grey" style="display:block;text-align:center;padding:12px;border-radius:8px;background:#6B7280;color:#fff;font-weight:bold;cursor:pointer;margin:8px 0">📷 Take certificate photo (optional)<input type="file" accept="image/*" capture="environment" style="display:none" onchange="sickPh(this)"></label><img id="skImg" alt="" style="display:none;max-width:100%;max-height:220px;border-radius:8px">' },
+        en: 'Mark ' + w.name + ' SICK today? Admin approves it as paid or unpaid.\nIf he has a medical certificate, upload it now (camera or gallery) – or later, when he brings it (button on his card).',
+        html: '<div class="hint" style="margin-top:8px">📎 Supporting document (optional)</div><div class="row" style="margin:4px 0 8px">' + upBtns('sickPh') + '</div><img id="skImg" alt="" style="display:none;max-width:100%;max-height:220px;border-radius:8px">' },
     () => {
       const img = SICK_IMG, ds = (window._d && window._d.date) || '';
       call('markAbsent', [PIN, w.name, 'SL'], d => {

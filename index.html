@@ -134,7 +134,11 @@
 
   <div id="adm" class="hidden">
     <div class="tabs" id="tabs">
-      <button data-p="appr" onclick="pg('appr')">🔔 Approvals<span id="apBadge" class="apb"></span></button><button data-p="task" onclick="pg('task')">📋 Tasks</button><button data-p="hr" onclick="pg('hr')">💼 HR</button><button data-p="att" onclick="pg('att')">Attendance</button><button data-p="staff" onclick="pg('staff')">Staff</button><button data-p="money" onclick="pg('money')">Money</button><button data-p="ls" onclick="pg('ls')">Leave Salary</button><button data-p="set" onclick="pg('set')">Settings</button>
+      <button data-p="live" onclick="pg('live')">👷 Live</button><button data-p="appr" onclick="pg('appr')">🔔 Approvals<span id="apBadge" class="apb"></span></button><button data-p="task" onclick="pg('task')">📋 Tasks</button><button data-p="hr" onclick="pg('hr')">💼 HR</button><button data-p="att" onclick="pg('att')">Attendance</button><button data-p="staff" onclick="pg('staff')">Staff</button><button data-p="money" onclick="pg('money')">💵 Advances &amp; Loans</button><button data-p="ls" onclick="pg('ls')">Leave Salary</button><button data-p="set" onclick="pg('set')">Settings</button>
+    </div>
+    <div class="card" data-pg="live">
+      <div class="row"><b style="flex:1">👷 Who is at work now</b><span class="hint" id="lvT"></span><button class="grey sm" onclick="liveLoad()">⟳ Refresh</button></div>
+      <div id="lvL" style="margin-top:8px">Loading…</div>
     </div>
     <div class="card" data-pg="hr">
       <div class="row"><b style="flex:1" id="hrT">Payroll</b><button class="grey sm" onclick="hrUpd()">⟳ Update now</button></div>
@@ -1029,6 +1033,22 @@ function pg(p){
   if (p === 'att') attShow();
   if (p === 'task') tkLoad();
   if (p === 'hr') hrLoad();
+  if (p === 'live') liveLoad();
+}
+/* ---- 👷 Live: both shifts, who is in / out / on leave / not in yet ---- */
+function liveLoad(){ call('adminLive', [PIN], liveDraw); }
+function liveDraw(r){
+  $('lvT').textContent = 'at ' + r.time + ' ';
+  const tag = x => x.st === 'IN' ? '<span style="color:#2E7D32;font-weight:bold">🟢 In since ' + esc(x.inT) + '</span>'
+    : x.st === 'OUT' ? '<span class="hint">⚪ ' + esc(x.inT) + '–' + esc(x.outT) + ' (left)</span>'
+    : x.st ? '<span style="color:#B26A00">🏖 ' + esc(LEAVE[x.st] || x.st) + '</span>'
+    : '<span style="color:#C62828">○ Not checked in</span>';
+  $('lvL').innerHTML = r.shifts.slice().sort((a, b) => (b.now ? 1 : 0) - (a.now ? 1 : 0)).map(s => {
+    const n = k => s.list.filter(x => k === 'LV' ? x.st && x.st !== 'IN' && x.st !== 'OUT' : k === '' ? !x.st : x.st === k).length;
+    return '<div style="margin-bottom:14px"><div style="font-weight:bold;color:var(--blue)">' + s.shift + ' SHIFT · ' + esc(s.day) + ' ' + niceD(s.ds) + ' · from ' + esc(s.start) + (s.now ? ' <span style="background:#2E7D32;color:#fff;border-radius:6px;padding:1px 6px;font-size:12px">NOW</span>' : '') + '</div>' +
+      '<div class="hint">In ' + n('IN') + ' · Left ' + n('OUT') + ' · Leave ' + n('LV') + ' · Not in ' + n('') + ' · Total ' + s.list.length + '</div>' +
+      '<table style="width:100%;margin-top:4px">' + s.list.map(x => '<tr><td>' + esc(x.name) + '</td><td style="text-align:right">' + tag(x) + '</td></tr>').join('') + '</table></div>';
+  }).join('');
 }
 /* attendance page: open one section at a time (tap again to close) */
 let ATT = '';

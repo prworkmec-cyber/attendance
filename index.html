@@ -108,7 +108,7 @@
   </div>
 
   <div id="sup" class="hidden">
-    <details class="sec" id="secAtt" open ontoggle="secSave(this)"><summary>👷 Attendance <span class="sct" id="sAtt"></span></summary><div class="in2">
+    <details class="sec" id="secAtt" open ontoggle="window.secSave&&secSave(this)"><summary>👷 Attendance <span class="sct" id="sAtt"></span></summary><div class="in2">
     <div id="open" class="card warn hidden"></div>
     <div id="list"></div>
     <button class="pri" style="width:100%" onclick="refresh()">Refresh</button>
@@ -117,12 +117,12 @@
       <div class="btns"><button id="bIn" class="in" disabled onclick="bulk('checkIn')">Check In selected</button><button id="bOut" class="out" disabled onclick="bulk('checkOut')">Check Out selected</button></div>
     </div>
     </div></details>
-    <details class="sec" id="secLv" ontoggle="secSave(this)"><summary>🏖 Leave &amp; approvals <span class="sct" id="sLv"></span></summary><div class="in2">
+    <details class="sec" id="secLv" ontoggle="window.secSave&&secSave(this)"><summary>🏖 Leave &amp; approvals <span class="sct" id="sLv"></span></summary><div class="in2">
       <div id="pend" class="card hidden" style="border-left:5px solid #B26A00"></div><div id="lvS"></div>
     </div></details>
-    <details class="sec" id="secWn" ontoggle="secSave(this)"><summary>⚠ Warnings <span class="sct" id="sWn"></span></summary><div class="in2" id="wnS"></div></details>
-    <details class="sec" id="secPn" ontoggle="secSave(this)"><summary>⏱ Penalties <span class="sct" id="sPn"></span></summary><div class="in2" id="pnS"></div></details>
-    <details class="sec" id="secTk" ontoggle="secSave(this)"><summary>📋 Tasks <span class="sct" id="sTk"></span></summary><div class="in2" id="tkS"></div></details>
+    <details class="sec" id="secWn" ontoggle="window.secSave&&secSave(this)"><summary>⚠ Warnings <span class="sct" id="sWn"></span></summary><div class="in2" id="wnS"></div></details>
+    <details class="sec" id="secPn" ontoggle="window.secSave&&secSave(this)"><summary>⏱ Penalties <span class="sct" id="sPn"></span></summary><div class="in2" id="pnS"></div></details>
+    <details class="sec" id="secTk" ontoggle="window.secSave&&secSave(this)"><summary>📋 Tasks <span class="sct" id="sTk"></span></summary><div class="in2" id="tkS"></div></details>
   </div>
 
   <div id="adm" class="hidden">
@@ -1054,7 +1054,7 @@ function rcSign(id){
     () => { $('rcM').style.display = 'flex'; });
 }
 function tDraw(){
-  const sh = $('tShift').value, rows = (window._staff || []).filter(r => r.active && r.shift === sh);
+  const sh = $('tShift').value, rows = bySh((window._staff || []).filter(r => r.active && r.shift === sh));
   $('tList').innerHTML = rows.map(r => '<label style="display:block;padding:5px 0"><input type="checkbox" value="' + esc(r.name) + '"' + (r.leave ? '' : ' checked') + '> ' + esc(r.name) +
     (r.leave ? ' <span class="flag">on ' + esc(LEAVE[r.leave] || r.leave) + '</span>' : '') + '</label>').join('') || '<div class="hint">No active workers on this shift.</div>';
   $('tAll').checked = rows.length > 0 && rows.every(r => !r.leave);
@@ -1127,8 +1127,17 @@ function lDel(i){
     () => call('deleteLoan', [PIN, l.row, l.name, l.ds], list => { toast('Loan deleted', true); lDraw(list); }));
 }
 function loadStaff(){ call('listStaff', [PIN], drawStaff); }
+/** Workers grouped DAY then NIGHT, A–Z inside each shift; removed workers at the end of their shift. */
+function bySh(rows){ const o = { DAY: 0, NIGHT: 1 }; return rows.slice().sort((a, b) => ((o[a.shift] ?? 2) - (o[b.shift] ?? 2)) || ((a.active ? 0 : 1) - (b.active ? 0 : 1)) || a.name.localeCompare(b.name)); }
+function grpOpts(rows, txt){
+  let h = '<option value="">— Select worker —</option>', g = '';
+  rows.forEach(r => { if (r.shift !== g) { h += (g ? '</optgroup>' : '') + '<optgroup label="' + esc(r.shift) + ' SHIFT">'; g = r.shift; } h += '<option value="' + esc(r.name) + '">' + esc(txt(r)) + '</option>'; });
+  return h + (g ? '</optgroup>' : '');
+}
 function drawStaff(rows){
+  rows = bySh(rows);
   $('staff').innerHTML = '<tr><th>Worker</th><th>Shift</th><th>Status</th><th></th></tr>' + rows.map((r, i) =>
+    (i === 0 || rows[i - 1].shift !== r.shift ? '<tr><td colspan="4" style="padding:' + (i ? '18px' : '6px') + ' 4px 6px;font-weight:bold;color:var(--blue);border-bottom:2px solid var(--blue)">' + esc(r.shift) + ' SHIFT</td></tr>' : '') +
     '<tr><td>' + esc(r.name) + (r.tabOk ? '' : '<br><span class="flag">No slip tab "' + esc(r.tab) + '"</span>') + '</td>' +
     '<td><select onchange="chShift(' + i + ',this)"><option' + (r.shift==='DAY'?' selected':'') + '>DAY</option><option' + (r.shift==='NIGHT'?' selected':'') + '>NIGHT</option></select></td>' +
     '<td>' + (r.active ? 'Active' : '<span class="flag">Removed</span>') + '</td>' +
@@ -1136,12 +1145,12 @@ function drawStaff(rows){
   ).join('');
   window._staff = rows;
   const keep = $('aWorker').value;
-  $('aWorker').innerHTML = '<option value="">— Select worker —</option>' + rows.map(r => '<option value="' + esc(r.name) + '">' + esc(r.name) + ' (' + r.shift + (r.active ? '' : ', removed') + ')</option>').join('');
+  $('aWorker').innerHTML = grpOpts(rows, r => r.name + (r.active ? '' : ' (removed)'));
   $('aWorker').value = keep;
   if (!$('aDate').value) $('aDate').value = dubaiNow().toISOString().slice(0, 10);
   if (!$('tDate').value) $('tDate').value = $('aDate').value;
   tDraw(); lsDraw();
-  const opts = '<option value="">— Select worker —</option>' + rows.filter(r => r.active).map(r => '<option value="' + esc(r.name) + '">' + esc(r.name) + ' (' + r.shift + ')</option>').join('');
+  const opts = grpOpts(rows.filter(r => r.active), r => r.name);
   ['vWorker', 'lWorker', 'pvWorker', 'pnWorker', 'wnWorker'].forEach(id => { const k = $(id).value; $(id).innerHTML = opts; $(id).value = k; });
   if (!$('vDate').value) $('vDate').value = $('aDate').value;
   if (!$('lDate').value) $('lDate').value = $('aDate').value;

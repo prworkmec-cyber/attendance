@@ -141,11 +141,20 @@
     <div class="card" data-pg="staff">
       <b>Add worker</b>
       <div class="row" style="margin-top:8px">
-        <input id="nName" placeholder="Name" style="flex:2;min-width:140px">
-        <input id="nTab" placeholder="Slip tab name (optional)" style="flex:2;min-width:140px">
+        <input id="nName" placeholder="Full name (as on payslip)" style="flex:2;min-width:140px">
+        <input id="nTab" placeholder="Short name in app (optional)" style="flex:2;min-width:140px">
         <select id="nShift"><option>DAY</option><option>NIGHT</option></select>
-        <button class="pri" onclick="addW()">Add</button>
       </div>
+      <div class="row" style="margin-top:6px">
+        <input id="nId" placeholder="EID or Passport No." style="flex:1;min-width:140px">
+        <input id="nDesig" placeholder="Designation (e.g. LABOUR)" style="flex:1;min-width:140px">
+      </div>
+      <div class="row" style="margin-top:6px">
+        <input id="nBasic" type="number" inputmode="decimal" placeholder="Basic salary (AED)" style="flex:1;min-width:110px">
+        <input id="nFood" type="number" inputmode="decimal" placeholder="Food allowance" style="flex:1;min-width:110px">
+        <input id="nOther" type="number" inputmode="decimal" placeholder="Other allowance" style="flex:1;min-width:110px">
+      </div>
+      <button class="pri" style="width:100%;margin-top:8px" onclick="addW()">Add worker + create payslip</button>
     </div>
     <div class="card" data-pg="att"><div class="row">
       <button id="swOne" class="grey" style="flex:1" onclick="attMode('one')">▸ One worker</button>
@@ -1138,7 +1147,7 @@ function drawStaff(rows){
   rows = bySh(rows);
   $('staff').innerHTML = '<tr><th>Worker</th><th>Shift</th><th>Status</th><th></th></tr>' + rows.map((r, i) =>
     (i === 0 || rows[i - 1].shift !== r.shift ? '<tr><td colspan="4" style="padding:' + (i ? '18px' : '6px') + ' 4px 6px;font-weight:bold;color:var(--blue);border-bottom:2px solid var(--blue)">' + esc(r.shift) + ' SHIFT</td></tr>' : '') +
-    '<tr><td>' + esc(r.name) + (r.tabOk ? '' : '<br><span class="flag">No slip tab "' + esc(r.tab) + '"</span>') + '</td>' +
+    '<tr><td>' + esc(r.name) + (r.tabOk ? '' : '<br><span class="flag">No payslip</span> <button class="grey sm" onclick="mkSlip(' + i + ')">Create payslip</button>') + '</td>' +
     '<td><select onchange="chShift(' + i + ',this)"><option' + (r.shift==='DAY'?' selected':'') + '>DAY</option><option' + (r.shift==='NIGHT'?' selected':'') + '>NIGHT</option></select></td>' +
     '<td>' + (r.active ? 'Active' : '<span class="flag">Removed</span>') + '</td>' +
     '<td><button class="' + (r.active ? 'out' : 'in') + '" onclick="tog(' + i + ')">' + (r.active ? 'Remove' : 'Restore') + '</button></td></tr>'
@@ -1156,13 +1165,39 @@ function drawStaff(rows){
   if (!$('lDate').value) $('lDate').value = $('aDate').value;
   if (!window._advLoaded) { window._advLoaded = 1; vLoad(); lLoad(); }
 }
+function payOf(p){ return { id: $(p + 'Id').value.trim(), desig: $(p + 'Desig').value.trim(), basic: $(p + 'Basic').value, food: $(p + 'Food').value || 0, other: $(p + 'Other').value || 0 }; }
+function payOk(f){
+  if (!f.id) { toast('Enter the EID or passport number', false); return false; }
+  if (!f.desig) { toast('Enter the designation', false); return false; }
+  if (!(Number(f.basic) > 0)) { toast('Enter the basic salary', false); return false; }
+  return true;
+}
 function addW(){
-  call('addStaff', [PIN, $('nName').value, $('nTab').value, $('nShift').value], r => { $('nName').value=''; $('nTab').value=''; drawStaff(r); toast('Worker added', true); });
+  const f = payOf('n'), name = $('nName').value.trim();
+  if (!name) { toast('Enter the name', false); return; }
+  if (!payOk(f)) return;
+  ask({ title: 'Add worker', names: [name], yes: 'Add',
+        en: $('nShift').value + ' shift · ' + f.desig + ' · ' + f.id + '\nBasic ' + aed(f.basic) + ' · Food ' + aed(f.food) + ' · Other ' + aed(f.other) + '\nHis payslip tab will be created.' },
+    () => call('addStaff', [PIN, name, $('nTab').value, $('nShift').value, f], r => {
+      ['nName', 'nTab', 'nId', 'nDesig', 'nBasic', 'nFood', 'nOther'].forEach(k => $(k).value = ''); drawStaff(r); toast(name + ' added – payslip created', true); }));
+}
+/** Payslip for a worker who has none yet. */
+function mkSlip(i){
+  const r = window._staff[i];
+  ask({ title: 'Create payslip', names: [r.name], yes: 'Create',
+        en: 'Enter his details – a payslip tab "' + r.tab + '" will be created.',
+        html: '<input id="cId" placeholder="EID or Passport No." style="width:100%;margin:4px 0"><input id="cDesig" placeholder="Designation" style="width:100%;margin:4px 0">' +
+              '<input id="cBasic" type="number" inputmode="decimal" placeholder="Basic salary (AED)" style="width:100%;margin:4px 0"><input id="cFood" type="number" inputmode="decimal" placeholder="Food allowance" style="width:100%;margin:4px 0">' +
+              '<input id="cOther" type="number" inputmode="decimal" placeholder="Other allowance" style="width:100%;margin:4px 0">' },
+    () => { const f = payOf('c'); if (!payOk(f)) return; call('createSlip', [PIN, r.name, f], x => { drawStaff(x); toast('Payslip created for ' + r.name, true); }); });
 }
 function tog(i){
   const r = window._staff[i];
-  ask({ title: r.active ? 'Remove worker' : 'Restore worker', en: (r.active ? 'Remove ' : 'Restore ') + r.name + '?', warn: r.active },
-    () => call('setActive', [PIN, r.name, !r.active], drawStaff));
+  if (!r.active) { ask({ title: 'Restore worker', en: 'Restore ' + r.name + '?' + (r.tabOk ? '' : '\nHis payslip was deleted – use "Create payslip" after restoring.') }, () => call('setActive', [PIN, r.name, true], drawStaff)); return; }
+  ask({ title: 'Remove worker', warn: true, names: [r.name], yes: 'Remove',
+        en: 'Remove ' + r.name + ' from the staff list?' + (r.tabOk ? '\nHis attendance stays in the Daily Log.' : ''),
+        html: r.tabOk ? '<label style="display:block;margin:8px 0;color:#C62828;font-weight:bold"><input type="checkbox" id="delSlip"> Also DELETE his payslip tab "' + esc(r.tab) + '" (cannot be undone)</label>' : '' },
+    () => call('setActive', [PIN, r.name, false, !!($('delSlip') && $('delSlip').checked)], drawStaff));
 }
 function chShift(i, sel){
   const r = window._staff[i], to = sel.value;

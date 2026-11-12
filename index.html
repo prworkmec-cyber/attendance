@@ -264,6 +264,14 @@
       <div class="hint">Every leave except Annual Vacation waits here. Approve when the worker shows the document (paid), or mark it unpaid. Pending leave is not decided automatically.</div>
       <div id="apList" style="margin-top:8px">Loading…</div>
     </div>
+    <div class="card" data-pg="set">
+      <div class="row"><b style="flex:1">🔑 Logins &amp; PINs</b><button class="grey sm" onclick="lgLoad()">⟳</button></div>
+      <div class="hint">PINs are stored coded – nobody can read them in the sheet. Changing a PIN logs that person out on his phone.</div>
+      <div id="lgL" style="margin-top:8px">Loading…</div>
+      <div class="row" style="margin-top:10px"><select id="lgS"><option>DAY</option><option>NIGHT</option><option>ADMIN</option></select><input id="lgN" placeholder="Name" style="flex:1;min-width:110px"><input id="lgP" type="password" inputmode="numeric" autocomplete="new-password" placeholder="PIN (4–8 digits)" style="flex:1;min-width:110px"></div>
+      <button class="pri" style="width:100%;margin-top:6px" onclick="lgAdd()">+ Add login</button>
+      <button class="out" style="width:100%;margin-top:10px" onclick="lgAll()">Log out all other phones</button>
+    </div>
     <div class="card" data-pg="set"><button class="pri" style="width:100%" onclick="setSiteHere()">📍 Set company location = my current position</button></div>
     <div class="card" data-pg="staff"><table id="staff"></table></div>
   </div>
@@ -335,6 +343,7 @@
 
 <script>
 const API = 'https://script.google.com/macros/s/AKfycbyC0FR05RyxhMxK1loRqrLZWp_hDt6FXX2T3Hf7fevP0itNdxwZasc7200WkermL-PsyA/exec';   // Apps Script backend
+const DEV = (() => { try { let d = localStorage.getItem('wmDev'); if (!d) { d = Math.random().toString(36).slice(2) + Date.now().toString(36); localStorage.setItem('wmDev', d); } return d; } catch (e) { return ''; } })();   // this phone's id (wrong-password lock is per phone)
 let PIN = '', OFFSET = 0, timer, BUSY = 0, TOK = '';   // TOK = this phone's login token (one login per account)
 const $ = id => document.getElementById(id);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -352,7 +361,7 @@ call('serverNow', [], t => { OFFSET = t - Date.now(); tick(); });
 function toast(t, ok){ const m=$('msg'); m.textContent=t; m.style.background= ok? '#2E7D32':'#C62828'; m.style.display='block'; clearTimeout(timer); timer=setTimeout(()=>m.style.display='none', ok ? 3500 : 8000); }
 function call(fn, args, done, onErr){
   BUSY++; document.body.style.cursor = 'progress';
-  fetch(API, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ fn: fn, args: args, tok: TOK }) })
+  fetch(API, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ fn: fn, args: args, tok: TOK, dev: DEV }) })
     .then(r => r.json())
     .then(r => { if (!r.ok && r.error === 'SESSION_ENDED') { logout('Logged out – this account was opened on another phone'); return; }
       if (r.ok) done(r.data); else if (onErr) onErr(r.error); else toast(r.error, false); })
@@ -363,9 +372,10 @@ function call(fn, args, done, onErr){
 /* ---- session: survives an accidental refresh; ends on Log out or after 15 minutes without any tap ---- */
 const IDLE_MS = Infinity;   // no auto logout – stays logged in until Log out is pressed
 let LAST = Date.now();
-function sesSave(){ try { localStorage.setItem('wmS', JSON.stringify({ p: PIN, t: LAST, k: TOK })); } catch (e) {} }
+function sesSave(){ try { localStorage.setItem('wmS', JSON.stringify({ t: LAST, k: TOK })); } catch (e) {} }   // only the session token is kept on the phone, never the PIN
 function sesClear(){ try { localStorage.removeItem('wmS'); } catch (e) {} }
 function logout(msg){
+  if (/^T:/.test(PIN)) try { fetch(API, { method: 'POST', keepalive: true, headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ fn: 'logoutMe', args: [PIN], dev: DEV }) }); } catch (e) {}
   sesClear(); PIN = ''; TOK = '';
   try { if (msg) sessionStorage.setItem('wmMsg', msg); } catch (e) {}
   location.reload();
@@ -378,9 +388,10 @@ function idleCheck(){ if (PIN && Date.now() - LAST > IDLE_MS) logout('Logged out
 setInterval(idleCheck, 30000);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) idleCheck(); });
 function doLogin(auto){
-  PIN = $('pin').value.trim();
-  call('login', [PIN, auto ? TOK : ''], r => {
-    TOK = r.tok || TOK; $('pin').value = ''; LAST = Date.now(); sesSave(); $('lo').classList.remove('hidden');
+  if (!auto) PIN = $('pin').value.trim();
+  call('login', [PIN], r => {
+    TOK = r.tok; PIN = 'T:' + r.tok; $('pin').value = ''; LAST = Date.now(); sesSave(); $('lo').classList.remove('hidden');
+    window._main = !!r.main;
     $('login').classList.add('hidden');
     if (r.role === 'ADMIN') { $('adm').classList.remove('hidden'); $('hdr').textContent = r.name || 'Admin'; loadStaff(); apLoad(); let p = 'att'; try { p = localStorage.getItem('admPg') || 'att'; } catch (e) {} pg(p); }
     else { $('sup').classList.remove('hidden'); if (r.roster) render(r.roster); else refresh(); getLoc(() => {}, true); }   // ask location permission early
@@ -391,7 +402,7 @@ $('pin').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); })
   let s = null, m = '';
   try { s = JSON.parse(localStorage.getItem('wmS') || 'null'); m = sessionStorage.getItem('wmMsg') || ''; sessionStorage.removeItem('wmMsg'); } catch (e) {}
   if (m) $('hdr').textContent = m;
-  if (s && s.p && Date.now() - s.t < IDLE_MS) { $('login').classList.add('hidden'); $('hdr').textContent = 'Loading…'; $('pin').value = s.p; TOK = s.k || ''; doLogin(true); }   // no login-screen flash on refresh
+  if (s && (s.k || s.p)) { $('login').classList.add('hidden'); $('hdr').textContent = 'Loading…'; PIN = s.p ? s.p : 'T:' + s.k; doLogin(true); }   // no login-screen flash on refresh (s.p = older app version: one more PIN login, then token only)
   else sesClear();
 })();
 
@@ -1029,11 +1040,36 @@ function pg(p){
   document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.p === p));
   try { localStorage.setItem('admPg', p); } catch (e) {}
   if (p === 'ls') lsrLoad();
+  if (p === 'set') lgLoad();
   if (p === 'appr') apLoad();
   if (p === 'att') attShow();
   if (p === 'task') tkLoad();
   if (p === 'hr') hrLoad();
   if (p === 'live') liveLoad();
+}
+/* ---- 🔑 Logins & PINs (admin) ---- */
+function lgLoad(){ call('listLogins', [PIN], lgDraw); }
+function lgDraw(r){
+  window._lg = r.list;
+  $('lgL').innerHTML = '<table style="width:100%">' + r.list.map((x, i) => '<tr><td>' + (x.online ? '🟢 ' : '⚪ ') + '<b>' + esc(x.name) + '</b> <span class="hint">' + esc(x.main ? 'Main admin' : x.shift === 'ADMIN' ? 'Admin' : x.shift + ' supervisor') + (x.hasPin ? '' : ' · no PIN') + '</span></td>' +
+    '<td style="text-align:right;white-space:nowrap">' + (x.main && !r.main ? '' : '<button class="grey sm" onclick="lgPin(' + i + ')">Set PIN</button>') + (x.main ? '' : ' <button class="out sm" onclick="lgDel(' + i + ')">Remove</button>') + '</td></tr>').join('') + '</table>' +
+    '<div class="hint">🟢 = logged in on a phone now</div>';
+}
+function lgPin(i){
+  const x = window._lg[i];
+  ask({ title: 'New PIN – ' + x.name, names: [x.name], yes: 'Save PIN', en: '4 to 8 digits, not used by anyone else. Tell it to ' + x.name + ' in person.',
+        html: '<input id="lgNP" type="password" inputmode="numeric" autocomplete="new-password" placeholder="New PIN" style="width:100%;margin:6px 0">' },
+    () => call('setLoginPin', [PIN, x.id, $('lgNP').value], r => { lgDraw(r); toast('PIN changed for ' + x.name, true); if (x.main) logout('PIN changed – log in with the new PIN'); }));
+}
+function lgDel(i){
+  const x = window._lg[i];
+  ask({ title: 'Remove login', warn: true, names: [x.name], yes: 'Remove', en: x.name + ' will be logged out and can no longer log in.' },
+    () => call('removeLogin', [PIN, x.id], r => { lgDraw(r); toast(x.name + ' removed', true); }));
+}
+function lgAdd(){ call('addLogin', [PIN, $('lgS').value, $('lgN').value, $('lgP').value], r => { lgDraw(r); $('lgN').value = ''; $('lgP').value = ''; toast('Login added', true); }); }
+function lgAll(){
+  ask({ title: 'Log out all other phones', warn: true, yes: 'Log out all', en: 'Every supervisor and admin phone except this one is logged out. They log in again with their PIN.' },
+    () => call('logoutAll', [PIN], m => { toast(m, true); lgLoad(); }));
 }
 /* ---- 👷 Live: both shifts, who is in / out / on leave / not in yet ---- */
 function liveLoad(){ call('adminLive', [PIN], liveDraw); }

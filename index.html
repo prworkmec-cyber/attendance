@@ -15,6 +15,8 @@
   *{box-sizing:border-box}
   body{margin:0;font-family:Arial,Helvetica,sans-serif;background:var(--bg);color:#1F2937}
   header{background:var(--blue);color:#fff;padding:14px 16px;position:relative}
+  #bell{position:absolute;top:54px;right:12px;background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.5);border-radius:8px;padding:6px 12px;font-size:16px}
+  .nt{padding:8px 4px;border-bottom:1px solid var(--line);font-size:14px;cursor:pointer} .nt.u{background:#EFF6FF;font-weight:bold} .nt .hint{margin:2px 0 0;font-weight:normal}
   #lo{position:absolute;top:12px;right:12px;background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.5);border-radius:8px;padding:6px 12px;font-size:14px}
   header h1{margin:0;font-size:18px}
   header .sub{font-size:13px;opacity:.85;margin-top:4px}
@@ -103,6 +105,7 @@
 <header>
   <h1>WORKMEC Attendance</h1>
   <button id="lo" class="hidden" onclick="logout()">Log out</button>
+  <button id="bell" class="hidden" onclick="ntOpen()">🔔<span id="ntN" class="apb"></span></button>
   <div class="sub" id="hdr">Enter your password</div>
   <div id="clock">--:--:--</div>
   <div id="today" class="sub" style="font-size:15px;opacity:1"></div>
@@ -391,7 +394,7 @@ function doLogin(auto){
   if (!auto) PIN = $('pin').value.trim();
   call('login', [PIN], r => {
     TOK = r.tok; PIN = 'T:' + r.tok; $('pin').value = ''; LAST = Date.now(); sesSave(); $('lo').classList.remove('hidden');
-    window._main = !!r.main;
+    window._main = !!r.main; window._role = r.role; $('bell').classList.remove('hidden'); ntPoll();
     $('login').classList.add('hidden');
     if (r.role === 'ADMIN') { $('adm').classList.remove('hidden'); $('hdr').textContent = r.name || 'Admin'; loadStaff(); apLoad(); let p = 'att'; try { p = localStorage.getItem('admPg') || 'att'; } catch (e) {} pg(p); }
     else { $('sup').classList.remove('hidden'); if (r.roster) render(r.roster); else refresh(); getLoc(() => {}, true); }   // ask location permission early
@@ -1047,6 +1050,32 @@ function pg(p){
   if (p === 'hr') hrLoad();
   if (p === 'live') liveLoad();
 }
+/* ---- 🔔 Notifications: bell under Log out; checked every 3 minutes while the app is open ---- */
+let NT_T = null;
+function ntPoll(){
+  clearTimeout(NT_T);
+  if (!/^T:/.test(PIN)) return;
+  if (!document.hidden) call('notifications', [PIN, true], r => { $('ntN').textContent = r.count ? (r.count > 99 ? '99+' : r.count) : ''; }, () => {});
+  NT_T = setTimeout(ntPoll, 180000);
+}
+document.addEventListener('visibilitychange', () => { if (!document.hidden && /^T:/.test(PIN)) ntPoll(); });
+function ntOpen(){
+  call('notifications', [PIN], r => {
+    window._nt = r;
+    const go = p => '<div class="nt" onclick="ntGo(\'' + esc(p.page || '') + '\')">';
+    ask({ title: '🔔 Notifications', noYes: true, en: r.todo.length || r.items.length ? '' : 'Nothing new.',
+          html: (r.todo.length ? '<div style="font-weight:bold;margin:4px 0">Needs attention</div>' + r.todo.map(t => go(t) + '⚠ ' + esc(t.text) + '</div>').join('') : '') +
+                (r.items.length ? '<div style="font-weight:bold;margin:12px 0 4px">Last 14 days</div>' + r.items.map(x => go(x).replace('class="nt"', 'class="nt' + (x.unread ? ' u' : '') + '"') + esc(x.text) + '<div class="hint">' + esc(x.when) + '</div></div>').join('') : '') +
+                '<div style="max-height:0"></div>' });
+    $('ntN').textContent = r.todo.reduce((a, t) => a + t.n, 0) || '';
+    call('notifSeen', [PIN], () => {}, () => {});
+  });
+}
+function ntGo(p){
+  $('modal').style.display = 'none';
+  if (window._role === 'ADMIN') { if (p) pg(p); }
+  else refresh();
+}
 /* ---- 🔑 Logins & PINs (admin) ---- */
 function lgLoad(){ call('listLogins', [PIN], lgDraw); }
 function lgDraw(r){
@@ -1374,7 +1403,7 @@ function drawStaff(rows){
     '<tr><td>' + esc(r.name) + (r.tabOk ? '' : '<br><span class="flag">No payslip</span> <button class="grey sm" onclick="mkSlip(' + i + ')">Create payslip</button>') + '</td>' +
     '<td><select onchange="chShift(' + i + ',this)"><option' + (r.shift==='DAY'?' selected':'') + '>DAY</option><option' + (r.shift==='NIGHT'?' selected':'') + '>NIGHT</option></select></td>' +
     '<td>' + (r.active ? 'Active' : '<span class="flag">Removed</span>') + '</td>' +
-    '<td><button class="' + (r.active ? 'out' : 'in') + '" onclick="tog(' + i + ')">' + (r.active ? 'Remove' : 'Restore') + '</button></td></tr>'
+    '<td style="white-space:nowrap">' + (r.tabOk ? '<button class="grey sm" onclick="stEdit(' + i + ')">Edit</button> ' : '') + '<button class="' + (r.active ? 'out' : 'in') + '" onclick="tog(' + i + ')">' + (r.active ? 'Remove' : 'Restore') + '</button></td></tr>'
   ).join('');
   window._staff = rows;
   const keep = $('aWorker').value;
@@ -1388,6 +1417,15 @@ function drawStaff(rows){
   if (!$('vDate').value) $('vDate').value = $('aDate').value;
   if (!$('lDate').value) $('lDate').value = $('aDate').value;
   if (!window._advLoaded) { window._advLoaded = 1; vLoad(); lLoad(); }
+}
+function stEdit(i){
+  const r = window._staff[i];
+  call('staffInfo', [PIN, r.name], x => ask({ title: 'Edit ' + r.name, names: [r.name], yes: 'Save',
+      en: 'Shown on his payslip and in the Salary Statement. Salary changes are made in 💼 HR; shift in the list.',
+      html: '<label>Full name (as on payslip)<input id="seF" value="' + esc(x.full) + '" style="width:100%"></label>' +
+            '<label>EID or passport No.<input id="seI" value="' + esc(x.id) + '" style="width:100%"></label>' +
+            '<label>Designation<input id="seD" value="' + esc(x.desig) + '" style="width:100%"></label>' },
+    () => call('editStaff', [PIN, r.name, $('seF').value, $('seI').value, $('seD').value], () => toast(r.name + ' updated', true))));
 }
 function payOf(p){ return { id: $(p + 'Id').value.trim(), desig: $(p + 'Desig').value.trim(), basic: $(p + 'Basic').value, food: $(p + 'Food').value || 0, other: $(p + 'Other').value || 0 }; }
 function payOk(f){

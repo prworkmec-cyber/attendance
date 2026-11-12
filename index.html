@@ -68,6 +68,12 @@
   @media print{ body *{visibility:hidden} #wlM,#wlM *{visibility:visible} #wlM{position:absolute;inset:0;display:block;background:none;padding:0}
     #wlM .box{max-height:none;overflow:visible;border-radius:0;box-shadow:none;max-width:none;padding:10mm} #wlM .noprint{display:none!important} }
   #mEn{font-size:15px;line-height:1.5}
+  .hrt td,.hrt th{padding:7px 4px;font-size:14px} .hrt tr.w{cursor:pointer} .hrt tr.w:active{background:#EEF2F7} .hrt .r{text-align:right;white-space:nowrap}
+  .cal{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin:8px 0} .cal .h{font-size:11px;color:var(--muted);text-align:center}
+  .cal .c{background:#fff;border:1px solid var(--line);border-radius:6px;min-height:52px;padding:3px;font-size:12px;cursor:pointer;position:relative}
+  .cal .c b{display:block;font-size:15px;text-align:center;margin-top:2px} .cal .c .ot{color:#1F6FB2;font-weight:bold;text-align:center} .cal .c.nt{border-color:#E0B252;background:#FFFBEB}
+  .cal .c.ch{border:2px solid #7C3AED} .cal .c .dn{color:var(--muted);font-size:11px} .cal .c.L b,.cal .c.hr b{color:#C62828} .cal .c.AV b{color:#B26A00}
+  .mt td{padding:6px 4px;font-size:14px} .mt td:last-child{text-align:right;white-space:nowrap}
   details.sec{background:var(--card);border:1px solid var(--line);border-radius:10px;margin-bottom:10px}
   details.sec>summary{list-style:none;cursor:pointer;padding:14px 12px;font-weight:bold;font-size:16px;display:flex;align-items:center;gap:8px}
   details.sec>summary::-webkit-details-marker{display:none}
@@ -127,7 +133,12 @@
 
   <div id="adm" class="hidden">
     <div class="tabs" id="tabs">
-      <button data-p="appr" onclick="pg('appr')">🔔 Approvals<span id="apBadge" class="apb"></span></button><button data-p="task" onclick="pg('task')">📋 Tasks</button><button data-p="att" onclick="pg('att')">Attendance</button><button data-p="staff" onclick="pg('staff')">Staff</button><button data-p="money" onclick="pg('money')">Money</button><button data-p="ls" onclick="pg('ls')">Leave Salary</button><button data-p="set" onclick="pg('set')">Settings</button>
+      <button data-p="appr" onclick="pg('appr')">🔔 Approvals<span id="apBadge" class="apb"></span></button><button data-p="task" onclick="pg('task')">📋 Tasks</button><button data-p="hr" onclick="pg('hr')">💼 HR</button><button data-p="att" onclick="pg('att')">Attendance</button><button data-p="staff" onclick="pg('staff')">Staff</button><button data-p="money" onclick="pg('money')">Money</button><button data-p="ls" onclick="pg('ls')">Leave Salary</button><button data-p="set" onclick="pg('set')">Settings</button>
+    </div>
+    <div class="card" data-pg="hr">
+      <div class="row"><b style="flex:1" id="hrT">Payroll</b><button class="grey sm" onclick="hrUpd()">⟳ Update now</button></div>
+      <div class="hint">Slips update by themselves every morning at 08:00. Tap a worker to open his payslip.</div>
+      <div id="hrL" style="margin-top:8px"></div>
     </div>
     <div class="card" data-pg="task">
       <b>New task</b>
@@ -299,6 +310,7 @@
 </div>
 <input id="docCam" type="file" accept="image/*" capture="environment" style="display:none" onchange="docTake(this)">
 <div id="wlM"><div class="box" id="wlB"></div></div>
+<div id="hrM" style="display:none;position:fixed;inset:0;background:var(--bg);z-index:45;overflow:auto;padding:12px 12px 40px"><div style="max-width:720px;margin:0 auto" id="hrB"></div></div>
 <div id="sigM"><div class="box">
   <h3 id="sigH">Leave salary – signature</h3>
   <div id="sigTxt" style="margin-bottom:8px"></div>
@@ -452,6 +464,79 @@ function tgConnect(){
     () => call('tgCheck', [PIN], c => { TG_ON = c.linked; toast(c.linked ? 'Connected – task alerts will ring on this phone' : 'Not connected yet – press START in Telegram, then try again', c.linked); if (window._tkAdm) tkLoad(); else refresh(); })));
 }
 function tgTest(){ call('tgTest', [PIN], m => toast(m, true)); }
+/* ---- 💼 HR: payroll overview, payslip view, changes, bonus/deduction, increments ---- */
+const hrAed = n => 'AED ' + Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+function hrLoad(){ call('hrMonth', [PIN], hrList); }
+function hrUpd(){ call('updateSlipsNow', [PIN], m => { toast(m, true); hrLoad(); }); }
+function hrList(r){
+  $('hrT').textContent = 'Payroll – ' + r.label;
+  const rows = bySh(r.rows.map(x => Object.assign({ active: true }, x)));
+  let g = '';
+  $('hrL').innerHTML = '<table class="hrt" style="width:100%"><tr><th>Worker</th><th class="r">Days</th><th class="r">OT h</th><th class="r">Gross</th></tr>' +
+    rows.map(x => (x.shift !== g ? (g = x.shift, '<tr><td colspan="4" style="font-weight:bold;color:var(--blue);padding-top:12px">' + esc(x.shift) + ' SHIFT</td></tr>') : '') +
+      '<tr class="w" onclick="hrOpen(\'' + esc(x.name).replace(/'/g, "\\'") + '\')"><td>' + esc(x.name) + (x.ded ? ' <span class="hint">−' + x.ded + '</span>' : '') + (x.bonus ? ' <span class="hint" style="color:#2E7D32">+' + x.bonus + '</span>' : '') + '</td><td class="r">' + x.days + '</td><td class="r">' + x.ot + '</td><td class="r"><b>' + hrAed(x.gross) + '</b></td></tr>').join('') +
+    '<tr><td colspan="3"><b>Total (' + r.rows.length + ' workers)</b></td><td class="r"><b>' + hrAed(r.total) + '</b></td></tr></table>';
+}
+function hrOpen(name){ call('hrSlip', [PIN, name], hrDraw); }
+function hrClose(){ $('hrM').style.display = 'none'; hrLoad(); }
+function hrDraw(s){
+  window._hs = s;
+  const first = new Date(s.month + '-01T12:00:00').getDay(), cells = [];
+  for (let k = 0; k < first; k++) cells.push('<div></div>');
+  s.days.forEach((d, i) => {
+    const n = d.n === '' ? '' : String(d.n), cls = (n === 'L' || (n !== '' && !isNaN(Number(n))) ? ' L' : n === 'AV' ? ' AV' : '') + (d.note ? ' nt' : '') + (d.chg ? ' ch' : '');
+    cells.push('<div class="c' + cls + '" title="' + esc(d.note) + '" onclick="hrDay(' + i + ')"><span class="dn">' + d.d + '</span><b>' + esc(n || '·') + '</b>' + (d.o !== '' && d.o ? '<div class="ot">+' + d.o + '</div>' : '') + '</div>');
+  });
+  const line = (a, b) => '<tr><td>' + a + '</td><td>' + b + '</td></tr>';
+  $('hrB').innerHTML =
+    '<div class="row" style="margin-bottom:6px"><button class="grey sm" onclick="hrClose()">← Back</button><b style="flex:1;font-size:17px">' + esc(s.name) + '</b><span class="hint">' + esc(s.label) + '</span></div>' +
+    '<div class="card"><div>' + esc(s.full) + ' · ' + esc(s.desig) + ' · ' + esc(s.id) + '</div><div class="hint">Basic ' + hrAed(s.basic) + (s.cur ? ' · salary from ' + esc(s.cur.m) : '') + '</div>' +
+      '<div class="cal">' + ['S', 'M', 'T', 'W', 'T', 'F', 'S'].map(x => '<div class="h">' + x + '</div>').join('') + cells.join('') + '</div>' +
+      '<div class="hint">P = full day · number = paid hours · H = Sunday · L = unpaid · +n = overtime · yellow = has a note · purple = changed by admin. Tap a day to see or change it.</div></div>' +
+    '<div class="card"><table class="mt" style="width:100%">' +
+      line('Normal (' + s.totDays + ' days)', hrAed(s.normalPay)) + line('Overtime (' + s.totOt + ' h)', hrAed(s.otPay)) + line('Food allowance', hrAed(s.food)) + line('Production / other', hrAed(s.other)) +
+      line('Bonus / benefit', '<span style="color:#2E7D32">' + hrAed(s.bonus) + '</span>') + line('Deduction (advance, loan, other)', '<span style="color:#C62828">−' + hrAed(s.ded) + '</span>') +
+      '<tr><td><b>Total gross</b></td><td><b>' + hrAed(s.gross) + '</b></td></tr></table>' +
+      (s.dedNote ? '<div class="hint" style="white-space:pre-wrap">' + esc(s.dedNote) + '</div>' : '') +
+      (s.adj.length ? '<div style="margin-top:6px">' + s.adj.map(a => '<div class="it">' + (a.type === 'Bonus' ? '➕ ' : '➖ ') + hrAed(a.amt) + ' – ' + esc(a.note) + ' <span class="hint">(' + esc(a.by) + ')</span> <button class="grey sm" onclick="hrAdjDel(\'' + esc(a.id) + '\')">Remove</button></div>').join('') + '</div>' : '') +
+      '<div class="row" style="margin-top:8px"><button class="in sm" onclick="hrAdj(\'Bonus\')">+ Bonus / benefit</button><button class="out sm" onclick="hrAdj(\'Deduction\')">+ Deduction</button></div></div>' +
+    '<div class="card"><b>Salary &amp; increments</b>' +
+      (s.cur ? '<div>Now: basic ' + hrAed(s.cur.basic) + ' · food ' + hrAed(s.cur.food) + ' · other ' + hrAed(s.cur.other) + '</div>' : '<div class="hint">No increment recorded yet – the slip\'s own amounts are used.</div>') +
+      (s.inc.length ? s.inc.map(x => '<div class="it">' + esc(x.m) + ': basic ' + x.basic + ' · food ' + x.food + ' · other ' + x.other + ' <span class="hint">' + esc(x.note) + '</span></div>').join('') : '') +
+      '<button class="pri sm" style="margin-top:8px" onclick="hrInc()">+ New salary / increment</button></div>';
+  $('hrM').style.display = 'block'; $('hrM').scrollTop = 0;
+}
+function hrDay(i){
+  const s = window._hs, d = s.days[i];
+  ask({ title: niceD(d.ds) + ' – ' + s.name, yes: 'Save change',
+        en: (d.note ? 'Note: ' + d.note + '\n' : '') + 'Normal: P, H, SL, EL, WL, AV, L or hours (e.g. 7). Overtime: hours.',
+        html: '<div class="row"><label style="flex:1">Normal<br><input id="hdN" value="' + esc(String(d.n)) + '" style="width:100%"></label><label style="flex:1">Overtime<br><input id="hdO" type="number" inputmode="decimal" value="' + esc(String(d.o)) + '" style="width:100%"></label></div>' +
+              '<input id="hdR" placeholder="Reason (required)" style="width:100%;margin-top:6px">' +
+              (d.chg ? '<label style="display:block;margin-top:8px"><input type="checkbox" id="hdU"> Undo the admin change (back to the Daily Log)</label>' : '') },
+    () => { const undo = $('hdU') && $('hdU').checked;
+      if (!undo && !$('hdR').value.trim()) { toast('Write the reason', false); return; }
+      call('hrChangeDay', [PIN, s.name, d.ds, $('hdN').value, $('hdO').value, $('hdR').value, !!undo], x => { hrDraw(x); toast(undo ? 'Change undone' : 'Day changed', true); }); });
+}
+function hrAdj(type){
+  const s = window._hs;
+  ask({ title: (type === 'Bonus' ? 'Bonus / benefit' : 'Deduction') + ' – ' + s.label, names: [s.name], yes: 'Add',
+        html: '<input id="haA" type="number" inputmode="decimal" placeholder="Amount (AED)" style="width:100%;margin:4px 0"><input id="haN" placeholder="What is it for? (required)" style="width:100%;margin:4px 0">',
+        en: type === 'Bonus' ? 'Paid only in ' + s.label + '.' : 'Deducted only in ' + s.label + ' (advances and loan instalments are added automatically).' },
+    () => call('hrAddAdjust', [PIN, s.name, type, $('haA').value, $('haN').value], x => { hrDraw(x); toast('Saved', true); }));
+}
+function hrAdjDel(id){
+  const s = window._hs, a = s.adj.find(x => x.id === id);
+  ask({ title: 'Remove ' + (a.type === 'Bonus' ? 'bonus' : 'deduction'), warn: true, names: [s.name], yes: 'Remove', en: hrAed(a.amt) + ' – ' + a.note + '\nThe removal is recorded.' },
+    () => call('hrDelAdjust', [PIN, s.name, id], x => { hrDraw(x); toast('Removed', true); }));
+}
+function hrInc(){
+  const s = window._hs, c = s.cur || { basic: s.basic, food: s.food, other: s.other };
+  ask({ title: 'New salary – ' + s.name, yes: 'Save', en: 'From the chosen month on, every payslip uses these amounts (monthly figures).',
+        html: '<label>Starts from month<br><input id="hiM" type="month" value="' + s.month + '" style="width:100%"></label>' +
+              '<div class="row" style="margin-top:6px"><label style="flex:1">Basic<br><input id="hiB" type="number" inputmode="decimal" value="' + (s.cur ? c.basic : s.basic) + '" style="width:100%"></label><label style="flex:1">Food<br><input id="hiF" type="number" inputmode="decimal" value="' + (s.cur ? c.food : s.foodM) + '" style="width:100%"></label><label style="flex:1">Other<br><input id="hiO" type="number" inputmode="decimal" value="' + (s.cur ? c.other : s.otherM) + '" style="width:100%"></label></div>' +
+              '<input id="hiN" placeholder="Note (e.g. yearly increment)" style="width:100%;margin-top:6px">' },
+    () => call('hrIncrement', [PIN, s.name, $('hiM').value, $('hiB').value, $('hiF').value || 0, $('hiO').value || 0, $('hiN').value], x => { hrDraw(x); toast('Salary saved', true); }));
+}
 function tkRes(r){ if (r.admin) tkAdmin(r); else { window._d.tasks = r.tasks; tkDraw(r.tasks, r.today, false); } }
 function tkAdmin(r){
   window._sups = r.sups; window._tkAdm = true; TG_ON = !!r.tg;
@@ -909,6 +994,7 @@ function pg(p){
   if (p === 'appr') apLoad();
   if (p === 'att') attShow();
   if (p === 'task') tkLoad();
+  if (p === 'hr') hrLoad();
 }
 /* attendance page: open one section at a time (tap again to close) */
 let ATT = '';

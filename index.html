@@ -259,7 +259,7 @@
   <div id="mNames"></div>
   <div id="mHtml"></div>
   <div id="mForm" style="display:none">
-    <select id="mReason" style="width:100%;margin:6px 0"><option value="">— Reason</option><option value="SL">Sick</option><option value="PL">Personal (unpaid)</option><option value="OTHER">Other</option></select>
+    <select id="mReason" style="width:100%;margin:6px 0"><option value="">— Reason</option><option value="CO">Sent by company (paid in full)</option><option value="SL">Sick (admin approves)</option><option value="PL">Personal (unpaid hours)</option><option value="OTHER">Other (admin decides)</option></select>
     <textarea id="mNote" rows="2" maxlength="300" placeholder="Note / more details" style="width:100%;font-size:15px;padding:8px;border-radius:8px;border:1px solid var(--line);font-family:inherit;margin-bottom:6px"></textarea>
   </div>
   <div id="mVac" style="display:none;margin:8px 0"><b>Vacation starts on</b><br><input id="mVacFrom" type="date" style="width:100%;margin-top:6px"></div>
@@ -537,6 +537,7 @@ const LEAVE_UR = { SL: 'بیماری کی چھٹی', EL: 'ہنگامی چھٹی'
 const LONG = ['AV', 'EL', 'PL'];
 const niceD = ds => { const d = new Date(ds + 'T00:00:00Z'); return d.getUTCDate() + ' ' + ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getUTCMonth()]; };
 const LEAVE_OPTS = Object.keys(LEAVE).map(k => '<option value="' + k + '">' + LEAVE[k] + '</option>').join('');
+LEAVE.EO = 'Early check-out';   // approvals only – not in the dropdown
 
 /* ---- in-page confirmation (replaces browser pop-ups) ---- */
 function ask(o, onYes, onNo){
@@ -928,7 +929,7 @@ function apDraw(res){
   window._ap = l; window._apDone = res && res.done ? res.done : [];
   $('apBadge').textContent = window._ap.length ? window._ap.length : '';
   $('apList').innerHTML = !window._ap.length ? '<div class="hint">Nothing waiting. ✓</div>' : window._ap.map((p, k) =>
-    '<div style="padding:8px 0;border-bottom:1px solid var(--line)"><b>' + esc(p.name) + '</b> · ' + esc(LEAVE[p.code] || p.code) + ' · ' + p.shift +
+    '<div style="padding:8px 0;border-bottom:1px solid var(--line)"><b>' + esc(p.name) + '</b> · ' + esc(LEAVE[p.code] || p.code) + ' · ' + p.shift + (p.why ? '<br><span class="hint">' + esc(p.why) + '</span>' : '') +
     '<br>' + niceD(p.from) + (p.days > 1 ? ' – ' + niceD(p.to) + ' (' + p.days + ' days)' : '') + ' · marked by ' + esc(p.by) +
     '<div class="row" style="margin-top:6px">' + (p.docs ? '<button class="pri sm" onclick="docView(window._ap[' + k + '],true)">📄 View certificate (' + p.docs + ')</button>' : '<span class="due">No certificate yet</span>') + '<button class="grey sm" onclick="docAdd(window._ap[' + k + '])">📷 Add</button></div>' +
     '<input id="apN' + k + '" placeholder="Note (optional) – e.g. medical certificate seen" style="width:100%;margin-top:6px">' +

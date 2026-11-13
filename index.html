@@ -17,6 +17,13 @@
   header{background:var(--blue);color:#fff;padding:14px 16px;position:relative}
   #bell{position:absolute;top:54px;right:12px;background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.5);border-radius:8px;padding:6px 12px;font-size:16px}
   .nt{padding:8px 4px;border-bottom:1px solid var(--line);font-size:14px;cursor:pointer} .nt.u{background:#EFF6FF;font-weight:bold} .nt .hint{margin:2px 0 0;font-weight:normal}
+  .wbig{background:#fff;border-radius:14px;padding:16px;box-shadow:0 4px 14px rgba(0,0,0,.08);margin-bottom:12px}
+  .wbig .v{font-size:32px;font-weight:800;color:var(--blue)} .wbar{height:8px;background:#E5EDF5;border-radius:6px;margin-top:8px;overflow:hidden} .wbar i{display:block;height:100%;background:linear-gradient(90deg,#2E7D32,#66BB6A)}
+  .wtiles{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px} .wt{background:#fff;border:1px solid var(--line);border-radius:12px;padding:10px 4px;text-align:center} .wt b{display:block;font-size:20px} .wt span{font-size:11px;color:var(--muted)}
+  .wcal{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-top:8px} .wcal div{border-radius:8px;text-align:center;font-size:12px;padding:5px 0;font-weight:600}
+  .wc-p{background:#E8F5E9;color:var(--green)} .wc-h{background:#EEF2F7;color:var(--muted)} .wc-l{background:#FDECEA;color:var(--red)} .wc-a{background:#E3F2FD;color:#1565C0} .wc-x{background:#FFF4E5;color:var(--amber)} .wc-f{color:#cbd5e1;border:1px dashed var(--line)} .wc-o{box-shadow:inset 0 -3px 0 #F59E0B}
+  .wrow{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--line);font-size:14px} .wrow:last-child{border:0}
+  .wtag{display:inline-block;font-size:11px;padding:2px 8px;border-radius:10px;background:#FFF4E5;color:var(--amber);font-weight:700}
   #lo{position:absolute;top:12px;right:12px;background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.5);border-radius:8px;padding:6px 12px;font-size:14px}
   header h1{margin:0;font-size:18px}
   header .sub{font-size:13px;opacity:.85;margin-top:4px}
@@ -117,7 +124,9 @@
     <button class="pri" onclick="doLogin()">Login</button>
   </div>
 
+  <div id="wrk" class="hidden"><div id="wkB">Loading…</div></div>
   <div id="sup" class="hidden">
+    <div id="srq" class="card hidden"></div>
     <details class="sec" id="secAtt" open ontoggle="window.secSave&&secSave(this)"><summary>👷 Attendance <span class="sct" id="sAtt"></span></summary><div class="in2">
     <div id="open" class="card warn hidden"></div>
     <div id="list"></div>
@@ -267,6 +276,11 @@
       <div class="hint">Every leave except Annual Vacation waits here. Approve when the worker shows the document (paid), or mark it unpaid. Pending leave is not decided automatically.</div>
       <div id="apList" style="margin-top:8px">Loading…</div>
     </div>
+    <div class="card" data-pg="appr">
+      <b>📝 Leave requests from workers</b>
+      <div class="hint">Requested ahead in the worker app. The supervisor confirms first; you decide paid, unpaid or refuse. Approved leave is booked ahead – on those days the worker shows as on leave.</div>
+      <div id="lrL" style="margin-top:8px">Loading…</div>
+    </div>
     <div class="card" data-pg="set">
       <div class="row"><b style="flex:1">🔑 Logins &amp; PINs</b><button class="grey sm" onclick="lgLoad()">⟳</button></div>
       <div class="hint">PINs are stored coded – nobody can read them in the sheet. Changing a PIN logs that person out on his phone.</div>
@@ -397,6 +411,7 @@ function doLogin(auto){
     window._main = !!r.main; window._role = r.role; $('bell').classList.remove('hidden'); ntPoll();
     $('login').classList.add('hidden');
     if (r.role === 'ADMIN') { $('adm').classList.remove('hidden'); $('hdr').textContent = r.name || 'Admin'; loadStaff(); apLoad(); let p = 'att'; try { p = localStorage.getItem('admPg') || 'att'; } catch (e) {} pg(p); }
+    else if (r.role === 'WORKER') { $('wrk').classList.remove('hidden'); $('hdr').textContent = 'Hello ' + r.name; wkLoad(); }
     else { $('sup').classList.remove('hidden'); if (r.roster) render(r.roster); else refresh(); getLoc(() => {}, true); }   // ask location permission early
   }, e => { PIN = ''; $('login').classList.remove('hidden'); $('hdr').textContent = 'Enter your password'; if (auto) { sesClear(); $('pin').value = ''; } toast(e, false); });
 }
@@ -629,6 +644,7 @@ function tkCancel(k){
 
 function render(d){
   OFFSET = d.now - Date.now(); tick(); EXEC_URL = d.url || EXEC_URL;
+  srqDraw(d.reqs || []);
   $('hdr').textContent = 'Welcome ' + d.name + ' · ' + d.shift + ' shift';
   const o = $('open');
   if (d.open.length){ o.innerHTML = '<b>No check-out recorded:</b> ' + d.open.map(esc).join(', ') + '<br>Admin must correct these in Daily Log.'; o.classList.remove('hidden'); }
@@ -1059,6 +1075,117 @@ function pg(p){
   if (p === 'hr') hrLoad();
   if (p === 'live') liveLoad();
 }
+/* ---- 👤 WORKER APP: own month, view only + leave requests ---- */
+const RQ_T = { AV: 'Annual vacation', EL: 'Emergency leave', PL: 'Personal leave (unpaid)', SL: 'Sick leave' };
+const wAed = n => 'AED ' + Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const rqDays = q => niceD(q.from) + (q.days > 1 ? ' – ' + niceD(q.to) + ' (' + q.days + ' days)' : '');
+const rqState = q => q.dec === 'Approved' ? '<span class="wtag" style="background:#E8F5E9;color:#2E7D32">Approved – paid</span>' : q.dec === 'Unpaid' ? '<span class="wtag" style="background:#E3F2FD;color:#1565C0">Approved – unpaid</span>'
+  : q.dec === 'Refused' ? '<span class="wtag" style="background:#FDECEA;color:#C62828">Refused</span>' : q.dec === 'Cancelled' ? '<span class="wtag" style="background:#EEF2F7;color:#6B7280">Cancelled</span>'
+  : q.sup === 'Confirmed' ? '<span class="wtag">Waiting for admin</span>' : '<span class="wtag">Waiting for supervisor</span>';
+function wkLoad(){ call('workerView', [PIN], wkDraw); }
+function wkDraw(v){
+  window._wk = v;
+  const s = v.slip, card = (t, b) => '<div class="card"><b>' + t + '</b>' + b + '</div>';
+  let h = '';
+  if (s) {
+    const done = s.days.filter(d => d.ds <= v.today).length, all = s.days.length;
+    h += '<div class="wbig"><div class="hint" style="margin:0">' + esc(s.full) + ' · ' + esc(s.desig) + ' · ' + esc(v.shift) + ' shift</div>' +
+      '<div class="hint" style="margin:8px 0 0">Salary so far in ' + esc(v.label) + ' <span class="wtag">estimate</span></div><div class="v">' + wAed(s.gross) + '</div>' +
+      '<div class="hint" style="margin:0">Updated every morning at 08:00. The final amount is fixed when the month closes on ' + esc(v.closeOn) + '.</div>' +
+      '<div class="wbar"><i style="width:' + Math.round(done / all * 100) + '%"></i></div><div class="hint" style="margin:4px 0 0">' + done + ' of ' + all + ' days of the month</div></div>';
+    h += '<div class="wtiles"><div class="wt"><b style="color:var(--green)">' + s.totDays + '</b><span>Days paid</span></div><div class="wt"><b style="color:#F59E0B">' + s.totOt + ' h</b><span>Overtime</span></div>' +
+      '<div class="wt"><b style="color:' + (v.warns.length ? 'var(--red)' : 'var(--green)') + '">' + v.warns.length + '</b><span>Warnings</span></div><div class="wt"><b style="color:' + (v.pens.length ? 'var(--red)' : 'var(--green)') + '">' + v.pens.reduce((a, p) => a + p.hrs, 0) + ' h</b><span>Penalty</span></div></div>';
+    const first = new Date(v.month + '-01T12:00:00').getDay(), cells = [];
+    for (let k = 0; k < first; k++) cells.push('<div></div>');
+    s.days.forEach(d => {
+      const n = d.n === '' ? '' : String(d.n), num = n !== '' && !isNaN(Number(n));
+      const c = d.ds > v.today || n === '' ? 'f' : n === 'H' ? 'h' : n === 'L' ? 'l' : n === 'AV' ? 'a' : num ? 'x' : 'p';
+      cells.push('<div class="wc-' + c + (d.o ? ' wc-o' : '') + '" title="' + esc(d.note || '') + '" onclick="wkDay(\'' + d.ds + '\')">' + d.d + '</div>');
+    });
+    h += card('My month', '<div class="hint" style="margin:2px 0">green = paid · orange = part day · grey = Sunday · red = unpaid · blue = vacation · orange line = overtime. Tap a day.</div>' +
+      '<div class="wcal">' + ['S', 'M', 'T', 'W', 'T', 'F', 'S'].map(x => '<div style="color:var(--muted)">' + x + '</div>').join('') + cells.join('') + '</div>');
+    h += card('Pay details', '<div class="wrow"><span>Basic (' + s.totDays + ' days)</span><b>' + wAed(s.normalPay) + '</b></div><div class="wrow"><span>Overtime (' + s.totOt + ' h)</span><b>' + wAed(s.otPay) + '</b></div>' +
+      '<div class="wrow"><span>Food allowance</span><b>' + wAed(s.food) + '</b></div>' + (s.other ? '<div class="wrow"><span>Other allowance</span><b>' + wAed(s.other) + '</b></div>' : '') +
+      (s.bonus ? '<div class="wrow"><span>Bonus</span><b style="color:var(--green)">' + wAed(s.bonus) + '</b></div>' : '') +
+      (s.ded ? '<div class="wrow"><span>Advance / loan / deduction</span><b style="color:var(--red)">−' + wAed(s.ded) + '</b></div>' : '') +
+      '<div class="wrow"><span><b>Total so far</b></span><b>' + wAed(s.gross) + '</b></div>' + (v.loanLeft ? '<div class="hint">Loan still to repay: ' + wAed(v.loanLeft) + '</div>' : ''));
+  } else h += '<div class="card">Your payslip is not ready yet – ask the office.</div>';
+  const lv = v.leave ? '<div class="wrow"><span>' + esc(v.leave.type) + ' booked</span><span>' + niceD(v.leave.from) + ' – back ' + niceD(v.leave.ret) + '</span></div>' : '';
+  h += card('Leave', lv + (v.reqs.length ? v.reqs.map(q => '<div class="wrow" style="align-items:center;gap:6px"><span>' + esc(q.type) + '<br><span class="hint">' + rqDays(q) + (q.note ? ' · ' + esc(q.note) : '') + '</span></span><span style="text-align:right">' + rqState(q) +
+      (!q.dec ? '<br><button class="grey sm" style="margin-top:4px" onclick="wkCancel(\'' + esc(q.id) + '\')">Cancel</button>' : '') + '</span></div>').join('') : (lv ? '' : '<div class="hint">No leave requested.</div>')) +
+    '<button class="pri" style="width:100%;margin-top:8px" onclick="wkReq()">📝 Request leave</button>');
+  if (v.pend.length) h += card('Waiting for admin', v.pend.map(p => '<div class="wrow"><span>' + esc(RQ_T[p.code] || LEAVE[p.code] || p.code) + '</span><span>' + niceD(p.from) + (p.days > 1 ? ' – ' + niceD(p.to) : '') + '</span></div>').join(''));
+  h += card('Warnings and penalties – ' + esc(v.label), (v.warns.length || v.pens.length ? v.warns.map(w => '<div class="wrow"><span>⚠ ' + niceD(w.ds) + ' – ' + esc(w.reason) + '</span><span class="hint">' + esc(w.by) + '</span></div>').join('') +
+    v.pens.map(p => '<div class="wrow"><span>⏱ Penalty ' + niceD(p.ds) + '</span><b style="color:var(--red)">−' + p.hrs + ' h</b></div>').join('') : '<div class="hint">None this month. 👍</div>'));
+  h += '<div class="hint" style="text-align:center;margin:10px 0 24px">🔒 View only – if something is wrong, tell your supervisor.</div>';
+  $('wkB').innerHTML = h;
+}
+function wkDay(ds){
+  const d = window._wk.slip.days.find(x => x.ds === ds); if (!d) return;
+  const n = String(d.n), w = { P: 'Full day – paid', H: 'Sunday', L: 'Unpaid', AV: 'Annual vacation (not paid)', SL: 'Sick leave – paid', EL: 'Emergency leave – paid', WL: 'Leave – paid' };
+  ask({ title: niceD(ds), noYes: true, en: (d.n === '' ? 'Not recorded yet.' : (w[n] || (isNaN(Number(n)) ? n : n + ' paid hours'))) + (d.o ? '\nOvertime: ' + d.o + ' h' : '') + (d.note ? '\n' + d.note : '') });
+}
+let WK_IMG = '';
+function wkReq(){
+  WK_IMG = '';
+  const v = window._wk, t = v.today;
+  ask({ title: '📝 Request leave', yes: 'Send request',
+        en: 'Your supervisor confirms first, then admin decides (paid or unpaid). You see the answer here and under 🔔.',
+        html: '<label>Type<select id="wkT" style="width:100%">' + Object.keys(RQ_T).map(k => '<option value="' + k + '">' + RQ_T[k] + '</option>').join('') + '</select></label>' +
+              '<div class="row" style="margin-top:6px"><label style="flex:1">First day<input id="wkF" type="date" min="' + t + '" value="' + t + '" style="width:100%"></label><label style="flex:1">Days<input id="wkD" type="number" inputmode="numeric" min="1" max="60" value="1" style="width:100%"></label></div>' +
+              '<input id="wkR" placeholder="Reason (required)" style="width:100%;margin-top:6px">' +
+              '<div class="hint" style="margin-top:8px">📎 Document (optional) – ticket, letter, medical paper</div><div class="row" style="margin:4px 0">' + upBtns('wkPh') + '</div><img id="wkI" alt="" style="display:none;max-width:100%;max-height:200px;border-radius:8px">' },
+    () => {
+      if (!$('wkR').value.trim()) { toast('Write the reason', false); return; }
+      call('requestLeave', [PIN, $('wkT').value, $('wkF').value, $('wkD').value, $('wkR').value, WK_IMG], v2 => { wkDraw(v2); toast('Request sent to your supervisor', true); });
+    });
+}
+function wkPh(inp){ const f = inp.files && inp.files[0]; if (!f) return; shrink(f, out => { WK_IMG = out; $('wkI').src = out; $('wkI').style.display = ''; }); }
+function wkCancel(id){ ask({ title: 'Cancel this request?', yes: 'Cancel request', warn: true, en: 'Your supervisor and admin will see that you cancelled it.' }, () => call('cancelLeaveReq', [PIN, id], v => { wkDraw(v); toast('Request cancelled', true); })); }
+/* supervisor: leave requests of his shift */
+function srqDraw(l){
+  window._srq = l;
+  const open = l.filter(q => q.sup === 'Waiting'), wait = l.filter(q => q.sup !== 'Waiting');
+  if (!l.length) { $('srq').classList.add('hidden'); return; }
+  $('srq').innerHTML = '<b>📝 Leave requests from your workers</b>' + open.map(q => { const k = l.indexOf(q); return '<div style="padding:8px 0;border-bottom:1px solid var(--line)"><b>' + esc(q.tab) + '</b> · ' + esc(q.type) + '<br>' + rqDays(q) + '<br><span class="hint">' + esc(q.reason) + '</span>' +
+      (q.doc ? ' <a href="' + esc(q.doc) + '" target="_blank">📄 document</a>' : '') +
+      '<div class="row" style="margin-top:6px"><button class="in sm" onclick="srqDo(' + k + ',true)">✓ Confirm</button><button class="out sm" onclick="srqDo(' + k + ',false)">✗ Refuse</button></div></div>'; }).join('') +
+    (wait.length ? '<div class="hint" style="margin-top:6px">Confirmed, waiting for admin: ' + wait.map(q => esc(q.tab) + ' ' + niceD(q.from)).join(', ') + '</div>' : '');
+  $('srq').classList.remove('hidden');
+}
+function srqDo(k, ok){
+  const q = window._srq[k];
+  ask({ title: (ok ? 'Confirm' : 'Refuse') + ' – ' + q.tab, names: [q.tab], yes: ok ? 'Confirm' : 'Refuse', warn: !ok, txt: ok ? '' : 'Reason for refusing (required)',
+        en: q.type + ', ' + rqDays(q) + '\n' + (ok ? 'You confirm you know about it. Admin decides paid or unpaid.' : 'The request ends here; the worker and admin are told.') },
+    f => { const note = (f && f.txt) || ''; if (!ok && !note.trim()) { toast('Write the reason', false); return; }
+      call('supDecideReq', [PIN, q.id, ok, note], d => { render(d); toast(ok ? 'Confirmed – sent to admin' : 'Refused', true); }); });
+}
+/* admin: leave requests */
+function lrLoad(){ call('listLeaveReqs', [PIN], lrDraw, () => {}); }
+function lrDraw(r){
+  window._lr = r.open;
+  $('lrL').innerHTML = (r.open.length ? r.open.map((q, k) => '<div style="padding:8px 0;border-bottom:1px solid var(--line)"><b>' + esc(q.tab) + '</b> · ' + esc(q.type) + ' · ' + esc(q.shift) + '<br>' + rqDays(q) +
+      '<br><span class="hint">' + esc(q.reason) + ' · asked ' + esc(q.at) + '</span> ' + (q.doc ? '<a href="' + esc(q.doc) + '" target="_blank">📄 document</a>' : '') +
+      '<div>' + (q.sup === 'Confirmed' ? '<span style="color:#2E7D32">✓ Supervisor ' + esc(q.supBy) + ' confirmed</span>' : '<span class="due">Supervisor has not answered yet</span>') + '</div>' +
+      '<input id="lrN' + k + '" placeholder="Note (optional)" style="width:100%;margin-top:6px">' +
+      '<div class="row" style="margin-top:6px"><button class="in sm" onclick="lrDo(' + k + ',\'Approved\')">✓ Approve (paid)</button><button class="grey sm" onclick="lrDo(' + k + ',\'Unpaid\')">Approve unpaid</button><button class="out sm" onclick="lrDo(' + k + ',\'Refused\')">✗ Refuse</button></div></div>').join('')
+    : '<div class="hint">No open requests. ✓</div>') +
+    (r.done.length ? '<div style="margin-top:12px"><b>Recent</b>' + r.done.map(q => '<div class="hint">' + esc(q.tab) + ' · ' + esc(q.type) + ' · ' + rqDays(q) + ' → <b>' + esc(q.dec) + '</b>' + (q.decBy ? ' (' + esc(q.decBy) + ')' : '') + '</div>').join('') + '</div>' : '');
+}
+function lrDo(k, dec){
+  const q = window._lr[k], note = $('lrN' + k).value;
+  ask({ title: (dec === 'Refused' ? 'Refuse' : dec === 'Unpaid' ? 'Approve as unpaid' : 'Approve (paid)') + ' – ' + q.tab, names: [q.tab], warn: dec === 'Refused', yes: dec === 'Refused' ? 'Refuse' : 'Approve',
+        en: q.type + ', ' + rqDays(q) + (dec === 'Refused' ? '' : '\nThe leave is booked ahead: on these days ' + q.tab + ' shows as on leave' + (q.code === 'AV' ? ' (annual vacation).' : (dec === 'Approved' ? ', paid.' : ', unpaid.'))) },
+    () => call('adminDecideReq', [PIN, q.id, dec, note], r => { lrDraw(r); toast(q.tab + ': ' + dec.toLowerCase(), true); }));
+}
+/* admin: worker PIN */
+function wPin(i){
+  const r = window._staff[i];
+  ask({ title: '🔑 Worker PIN – ' + r.name, names: [r.name], yes: 'Save',
+        en: 'With this PIN ' + r.name + ' sees only his own month (salary, days, overtime, warnings) and can request leave. He cannot change anything.' + (r.hasPin ? '\nHe already has a PIN – a new one replaces it. Leave empty to remove his access.' : '') + '\nGive the PIN to him in person.',
+        html: '<input id="wpN" type="password" inputmode="numeric" autocomplete="new-password" placeholder="4–8 digits" style="width:100%;margin:6px 0">' },
+    () => call('setWorkerPin', [PIN, r.name, $('wpN').value], rows => { drawStaff(rows); toast($('wpN').value ? 'PIN saved for ' + r.name : 'Access removed for ' + r.name, true); }));
+}
 /* ---- 🔔 Notifications: bell under Log out; checked every 3 minutes while the app is open ---- */
 let NT_T = null;
 function ntPoll(){
@@ -1083,6 +1210,7 @@ function ntOpen(){
 function ntGo(p){
   $('modal').style.display = 'none';
   if (window._role === 'ADMIN') { if (p) pg(p); }
+  else if (window._role === 'WORKER') wkLoad();
   else refresh();
 }
 /* ---- 🔑 Logins & PINs (admin) ---- */
@@ -1137,7 +1265,7 @@ function attShow(){
   });
 }
 /* ---- admin leave approvals ---- */
-function apLoad(){ call('listApprovals', [PIN], apDraw); }
+function apLoad(){ call('listApprovals', [PIN], apDraw); lrLoad(); }
 function apDraw(res){
   const l = res && res.pending ? res.pending : (res || []);
   window._ap = l; window._apDone = res && res.done ? res.done : [];
@@ -1412,7 +1540,7 @@ function drawStaff(rows){
     '<tr><td>' + esc(r.name) + (r.tabOk ? '' : '<br><span class="flag">No payslip</span> <button class="grey sm" onclick="mkSlip(' + i + ')">Create payslip</button>') + '</td>' +
     '<td><select onchange="chShift(' + i + ',this)"><option' + (r.shift==='DAY'?' selected':'') + '>DAY</option><option' + (r.shift==='NIGHT'?' selected':'') + '>NIGHT</option></select></td>' +
     '<td>' + (r.active ? 'Active' : '<span class="flag">Removed</span>') + '</td>' +
-    '<td style="white-space:nowrap">' + (r.tabOk ? '<button class="grey sm" onclick="stEdit(' + i + ')">Edit</button> ' : '') + '<button class="' + (r.active ? 'out' : 'in') + '" onclick="tog(' + i + ')">' + (r.active ? 'Remove' : 'Restore') + '</button></td></tr>'
+    '<td style="white-space:nowrap">' + (r.active ? '<button class="grey sm" onclick="wPin(' + i + ')">' + (r.hasPin ? '🔑 PIN ✓' : '🔑 PIN') + '</button> ' : '') + (r.tabOk ? '<button class="grey sm" onclick="stEdit(' + i + ')">Edit</button> ' : '') + '<button class="' + (r.active ? 'out' : 'in') + '" onclick="tog(' + i + ')">' + (r.active ? 'Remove' : 'Restore') + '</button></td></tr>'
   ).join('');
   window._staff = rows;
   const keep = $('aWorker').value;

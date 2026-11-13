@@ -126,6 +126,7 @@
 
   <div id="wrk" class="hidden"><div id="wkB">Loading…</div></div>
   <div id="sup" class="hidden">
+    <div id="qbar" class="card warn hidden"></div>
     <div id="srq" class="card hidden"></div>
     <details class="sec" id="secAtt" open ontoggle="window.secSave&&secSave(this)"><summary>👷 Attendance <span class="sct" id="sAtt"></span></summary><div class="in2">
     <div id="open" class="card warn hidden"></div>
@@ -376,13 +377,13 @@ setInterval(tick, 1000); tick();
 call('serverNow', [], t => { OFFSET = t - Date.now(); tick(); });
 
 function toast(t, ok){ const m=$('msg'); m.textContent=t; m.style.background= ok? '#2E7D32':'#C62828'; m.style.display='block'; clearTimeout(timer); timer=setTimeout(()=>m.style.display='none', ok ? 3500 : 8000); }
-function call(fn, args, done, onErr){
+function call(fn, args, done, onErr, onNet){
   BUSY++; document.body.style.cursor = 'progress';
   fetch(API, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ fn: fn, args: args, tok: TOK, dev: DEV }) })
     .then(r => r.json())
     .then(r => { if (!r.ok && r.error === 'SESSION_ENDED') { logout('Logged out – this account was opened on another phone'); return; }
       if (r.ok) done(r.data); else if (onErr) onErr(r.error); else toast(r.error, false); })
-    .catch(() => toast('No internet / server not reachable', false))
+    .catch(() => { if (onNet) onNet(); else toast('No internet / server not reachable', false); })
     .finally(() => { if (--BUSY <= 0) { BUSY = 0; document.body.style.cursor = ''; } });
 }
 
@@ -408,7 +409,7 @@ function doLogin(auto){
   if (!auto) PIN = $('pin').value.trim();
   call('login', [PIN], r => {
     TOK = r.tok; PIN = 'T:' + r.tok; $('pin').value = ''; LAST = Date.now(); sesSave(); $('lo').classList.remove('hidden');
-    window._main = !!r.main; window._role = r.role; $('bell').classList.remove('hidden'); ntPoll();
+    window._main = !!r.main; window._role = r.role; $('bell').classList.remove('hidden'); ntPoll(); if (r.role === 'SUP') setTimeout(() => { qBar(); qSync(); }, 500);
     $('login').classList.add('hidden');
     if (r.role === 'ADMIN') { $('adm').classList.remove('hidden'); $('hdr').textContent = r.name || 'Admin'; loadStaff(); apLoad(); let p = 'att'; try { p = localStorage.getItem('admPg') || 'att'; } catch (e) {} pg(p); }
     else if (r.role === 'WORKER') { $('wrk').classList.remove('hidden'); $('hdr').textContent = 'Hello ' + r.name; wkLoad(); }
@@ -799,23 +800,26 @@ function updBulk(){
 function bulk(fn){
   const names = [...document.querySelectorAll('#list .chk:checked')].map(c => window._list[+c.dataset.i].name);
   if (!names.length) { toast('Tick at least one worker first', false); return; }
-  const go = (loc, f) => call(fn + 'Many', [PIN, names, loc].concat(f ? [f.reason || '', f.note || '', f.brk || ''] : []), r => {
+  const ex = f => f ? [f.reason || '', f.note || '', f.brk || ''] : [];
+  const go = (loc, f) => call(fn + 'Many', [PIN, names, loc].concat(ex(f)), r => {
     render(r.roster);
     toast(r.ok + ' worker(s) ' + (fn === 'checkIn' ? 'checked in' : 'checked out') +
       (r.errors.length ? ' · NOT done: ' + r.errors.join(' | ') : ''), !r.errors.length);
-  });
+  }, undefined, () => qAdd({ fn: fn + 'Many', args: [PIN, names, loc].concat(ex(f)), label: names.length + ' worker(s)' + (fn === 'checkIn' ? ' check-in ' : ' check-out ') + qHH(loc.at) }));
   getLoc(loc => {
     if (fn === 'checkIn') { ask(inMsg(names, ''), () => go(loc)); return; }
-    call('checkOutPreview', [PIN, names[0], names], p => ask(outMsg(p, names), f => go(loc, f)));
+    call('checkOutPreview', [PIN, names[0], names], p => ask(outMsg(p, names), f => go(loc, f)), undefined, () => qOut(names, loc, true));
   });
 }
 
 function act(fn, i){
   const w = window._list[i];
-  const go = (loc, f) => call(fn, [PIN, w.name, false, loc].concat(f ? [f.reason || '', f.note || '', f.brk || ''] : []), d => { render(d); toast(w.name + (fn === 'checkIn' ? ' checked in' : ' checked out'), true); });
+  const ex = f => f ? [f.reason || '', f.note || '', f.brk || ''] : [];
+  const go = (loc, f) => call(fn, [PIN, w.name, false, loc].concat(ex(f)), d => { render(d); toast(w.name + (fn === 'checkIn' ? ' checked in' : ' checked out'), true); }, undefined,
+    () => qAdd({ fn: fn, args: [PIN, w.name, true, loc].concat(ex(f)), label: w.name + (fn === 'checkIn' ? ' check-in ' : ' check-out ') + qHH(loc.at) }));
   getLoc(loc => {
     if (fn === 'checkIn') { ask(inMsg([w.name], w.leave ? w.leave.code : w.status && w.status !== 'P' ? w.status : ''), () => go(loc)); return; }
-    call('checkOutPreview', [PIN, w.name, [w.name]], p => ask(outMsg(p, [w.name]), f => go(loc, f)));
+    call('checkOutPreview', [PIN, w.name, [w.name]], p => ask(outMsg(p, [w.name]), f => go(loc, f)), undefined, () => qOut([w.name], loc, false));
   });
 }
 /** "▸ Leave" on a worker card: open / close the booking options. */
@@ -927,7 +931,7 @@ function getLoc(ok, silent){
   if (!navigator.geolocation) { if (!silent) locFail({ code: 0 }); return; }
   if (!silent) toast('Getting location…', true);
   navigator.geolocation.getCurrentPosition(
-    p => ok({ lat: p.coords.latitude, lng: p.coords.longitude, acc: Math.round(p.coords.accuracy) }),
+    p => ok({ lat: p.coords.latitude, lng: p.coords.longitude, acc: Math.round(p.coords.accuracy), at: Date.now() + OFFSET }),   // at = tap time, kept if sent later (no internet)
     e => { if (!silent) locFail(e); },
     { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 });
 }
@@ -1075,6 +1079,59 @@ function pg(p){
   if (p === 'hr') hrLoad();
   if (p === 'live') liveLoad();
 }
+/* ---- 📶 NO INTERNET: check-in/out taps are kept on this phone with their time and sent when the internet is back ---- */
+const qGet = k => { try { return JSON.parse(localStorage.getItem(k || 'wmQ') || '[]'); } catch (e) { return []; } };
+const qSet = (v, k) => { try { localStorage.setItem(k || 'wmQ', JSON.stringify(v)); } catch (e) {} };
+const qHH = at => new Date(at || Date.now()).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+function qAdd(it){
+  const q = qGet(); q.push(it); qSet(q); qBar();
+  toast('📶 No internet – saved on this phone: ' + it.label + '. It is sent automatically when the internet is back.', true);
+}
+function qOut(names, loc, many){
+  ask({ title: '📶 No internet', names: names, yes: 'Save check-out',
+        en: 'Save the check-out at ' + qHH(loc.at) + ' on this phone? It is sent automatically when the internet is back.\nIf the shift was not complete (or it is Sunday), you will be asked for the reason then.' },
+    () => qAdd({ fn: many ? 'checkOutMany' : 'checkOut', args: many ? [PIN, names, loc] : [PIN, names[0], true, loc], label: (many ? names.length + ' worker(s)' : names[0]) + ' check-out ' + qHH(loc.at) }));
+}
+function qFail(it, msg){
+  const many = /Many$/.test(it.fn), names = many ? it.args[1] : [it.args[1]], loc = it.args[many ? 2 : 3];
+  const name = names.find(n => msg.indexOf(n) === 0) || names[0];
+  if (/^checkOut/.test(it.fn)) { const f = qGet('wmQf'); f.push({ name: name, loc: loc, msg: msg }); qSet(f, 'wmQf'); }
+  else toast('Not saved: ' + name + ' – ' + msg, false);
+}
+let QBUSY = false;
+async function qSync(){
+  if (QBUSY || !/^T:/.test(PIN) || window._role !== 'SUP') return;
+  let q = qGet(); if (!q.length) { qBar(); return; }
+  QBUSY = true; let sent = 0;
+  try {
+    while (q.length) {
+      const it = q[0], args = it.args.slice(); args[0] = PIN;
+      let r; try { r = await fetch(API, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ fn: it.fn, args: args, tok: TOK, dev: DEV }) }).then(x => x.json()); } catch (e) { break; }
+      if (!r.ok && r.error === 'SESSION_ENDED') break;
+      q.shift(); qSet(q); sent++;
+      if (r.ok) { if (/Many$/.test(it.fn) && r.data && r.data.errors) r.data.errors.forEach(m => qFail(it, m)); }
+      else qFail(it, r.error);
+    }
+  } finally { QBUSY = false; qBar(); if (sent) { toast('📶 Internet back – ' + sent + ' saved punch(es) sent', true); refresh(); } }
+}
+function qBar(){
+  const q = qGet(), f = qGet('wmQf'), b = $('qbar'); if (!b) return;
+  if (!q.length && !f.length) { b.classList.add('hidden'); return; }
+  b.innerHTML = (q.length ? '<b>📶 ' + q.length + ' punch(es) saved on this phone</b> – waiting for internet: ' + q.map(x => esc(x.label)).join(', ') + ' <button class="grey sm" onclick="qSync()">Send now</button>' : '') +
+    f.map((x, k) => '<div style="margin-top:6px">⚠ <b>' + esc(x.name) + '</b> check-out ' + qHH(x.loc && x.loc.at) + ' not saved: ' + esc(x.msg) +
+      ' <button class="pri sm" onclick="qFin(' + k + ')">Finish</button> <button class="grey sm" onclick="qDrop(' + k + ')">Remove</button></div>').join('');
+  b.classList.remove('hidden');
+}
+function qFin(k){
+  const x = qGet('wmQf')[k];
+  ask({ title: 'Finish check-out – ' + x.name, names: [x.name], yes: 'Send', form: /reason/i.test(x.msg), brk: /lunch break/i.test(x.msg),
+        en: x.msg + '\nThe time saved on the phone (' + qHH(x.loc && x.loc.at) + ') is used.' },
+    f => call('checkOut', [PIN, x.name, true, x.loc, (f && f.reason) || '', (f && f.note) || '', (f && f.brk) || ''], () => { qDrop(k, true); toast(x.name + ' checked out', true); refresh(); },
+      e => { const l = qGet('wmQf'); if (l[k]) { l[k].msg = e; qSet(l, 'wmQf'); } qBar(); toast(e, false); }));
+}
+function qDrop(k, quiet){ const l = qGet('wmQf'); l.splice(k, 1); qSet(l, 'wmQf'); qBar(); if (!quiet) toast('Removed', true); }
+window.addEventListener('online', () => setTimeout(qSync, 1500));
+setInterval(() => { if (navigator.onLine) qSync(); }, 30000);
 /* ---- 👤 WORKER APP: own month, view only + leave requests ---- */
 const RQ_T = { AV: 'Annual vacation', EL: 'Emergency leave', PL: 'Personal leave (unpaid)', SL: 'Sick leave' };
 const wAed = n => 'AED ' + Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });

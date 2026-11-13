@@ -497,7 +497,16 @@ function hrList(r){
     '<tr><td colspan="3"><b>Total (' + r.rows.length + ' workers)</b></td><td class="r"><b>' + hrAed(r.total) + '</b></td></tr>' +
     (r.mg && r.mg.length ? '<tr><td colspan="4" style="font-weight:bold;color:var(--blue);padding-top:16px">MANAGEMENT <span class="hint">(full month, no attendance)</span></td></tr>' +
       r.mg.map(x => '<tr class="w" onclick="hrMgOpen(\'' + esc(x.key) + '\')"><td>' + esc(x.name) + (x.ded ? ' <span class="hint">−' + x.ded + '</span>' : '') + (x.bonus ? ' <span class="hint" style="color:#2E7D32">+' + x.bonus + '</span>' : '') + '</td><td class="r">–</td><td class="r">–</td><td class="r"><b>' + hrAed(x.gross) + '</b></td></tr>').join('') +
-      '<tr><td colspan="3"><b>Total management</b></td><td class="r"><b>' + hrAed(r.mgTotal) + '</b></td></tr>' : '') + '</table>';
+      '<tr><td colspan="3"><b>Total management</b></td><td class="r"><b>' + hrAed(r.mgTotal) + '</b></td></tr>' : '') + '</table>' +
+    (r.closeOn ? '<div class="card" style="margin-top:12px;background:#F8FAFC"><b>📅 Month close</b>' +
+      '<div class="hint">' + esc(r.label) + ' closes by itself on ' + esc(r.closeOn) + ' at 07:00: the month is locked, requests still waiting become unpaid, a "' + esc(r.label) + '" tab is added to the Salary Statement, and the statement PDF + all payslips (Excel) are saved in Drive and emailed to ' + esc((r.mailTo || []).join(', ')) + '. Then the payslips move to the next month.' + (r.closed ? ' Last closed: ' + esc(r.closed) + '.' : '') + '</div>' +
+      '<div class="row"><button class="grey sm" onclick="hrPre()">Check before closing</button>' + (r.over ? '<button class="out sm" onclick="hrCloseNow(\'' + esc(r.label) + '\')">Close ' + esc(r.label) + ' now</button>' : '') + '</div></div>' : '');
+}
+function hrPre(){ call('preCloseNow', [PIN], r => ask({ title: '📅 Before closing ' + monLbl(r.month), noYes: true, en: r.text })); }
+const monLbl = m => new Date(m + '-01T12:00:00').toLocaleString('en-GB', { month: 'long', year: 'numeric' });
+function hrCloseNow(lbl){
+  ask({ title: 'Close ' + lbl + ' now', warn: true, yes: 'Close month', en: 'The month is locked, the statement tab, PDF and Excel are made and emailed, and the payslips move to the next month. This takes about a minute and cannot be undone.' },
+    () => { toast('Closing ' + lbl + '… please wait', true); call('closeMonthNow', [PIN], m => { toast(m, true); hrLoad(); }); });
 }
 function hrMgOpen(key){ call('hrMgSlip', [PIN, key], hrDraw); }
 function hrMgDraw(s){

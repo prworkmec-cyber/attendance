@@ -1110,7 +1110,9 @@ function qOut(names, loc, many){
         en: 'Save the check-out at ' + qHH(loc.at) + ' on this phone? It is sent automatically when the internet is back.\nIf the shift was not complete (or it is Sunday), you will be asked for the reason then.' },
     () => qAdd({ fn: many ? 'checkOutMany' : 'checkOut', args: many ? [PIN, names, loc] : [PIN, names[0], true, loc], label: (many ? names.length + ' worker(s)' : names[0]) + ' check-out ' + qHH(loc.at) }));
 }
+const qDone = msg => /already checked (out|in)/i.test(String(msg || ''));   // the punch is already in the record = nothing to finish
 function qFail(it, msg){
+  if (qDone(msg)) return;
   const many = /Many$/.test(it.fn), names = many ? it.args[1] : [it.args[1]], loc = it.args[many ? 2 : 3];
   const name = names.find(n => msg.indexOf(n) === 0) || names[0];
   if (/^checkOut/.test(it.fn)) { const f = qGet('wmQf'); f.push({ name: name, loc: loc, msg: msg }); qSet(f, 'wmQf'); }
@@ -1133,7 +1135,8 @@ async function qSync(){
   } finally { QBUSY = false; qBar(); if (sent) { toast('📶 Internet back – ' + sent + ' saved punch(es) sent', true); refresh(); } }
 }
 function qBar(){
-  const q = qGet(), f = qGet('wmQf'), b = $('qbar'); if (!b) return;
+  const q = qGet(), b = $('qbar'); if (!b) return;
+  let f = qGet('wmQf'); const f2 = f.filter(x => !qDone(x.msg)); if (f2.length !== f.length) { f = f2; qSet(f, 'wmQf'); }   // clear old "already checked out" items
   if (!q.length && !f.length) { b.classList.add('hidden'); return; }
   b.innerHTML = (q.length ? '<b>📶 ' + q.length + ' punch(es) saved on this phone</b> – waiting for internet: ' + q.map(x => esc(x.label)).join(', ') + ' <button class="grey sm" onclick="qSync()">Send now</button>' : '') +
     f.map((x, k) => '<div style="margin-top:6px">⚠ <b>' + esc(x.name) + '</b> check-out ' + qHH(x.loc && x.loc.at) + ' not saved: ' + esc(x.msg) +

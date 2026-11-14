@@ -382,14 +382,15 @@ function call(fn, args, done, onErr, onNet){
   BUSY++; document.body.style.cursor = 'progress';
   fetch(API, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ fn: fn, args: args, tok: TOK, dev: DEV }) })
     .then(r => r.json())
-    .then(r => { if (!r.ok && r.error === 'SESSION_ENDED') { logout('Logged out – this account was opened on another phone'); return; }
+    .then(r => { if (!r.ok && r.error === 'SESSION_IDLE') { logout('Logged out – no activity for 10 minutes'); return; }
+      if (!r.ok && r.error === 'SESSION_ENDED') { logout('Logged out – this account was opened on another phone'); return; }
       if (r.ok) done(r.data); else if (onErr) onErr(r.error); else toast(r.error, false); })
     .catch(() => { if (onNet) onNet(); else toast('No internet / server not reachable', false); })
     .finally(() => { if (--BUSY <= 0) { BUSY = 0; document.body.style.cursor = ''; } });
 }
 
 /* ---- session: survives an accidental refresh; ends on Log out or after 15 minutes without any tap ---- */
-const IDLE_MS = Infinity;   // no auto logout – stays logged in until Log out is pressed
+const IDLE_MS = 10 * 60 * 1000;   // logged out after 10 minutes without a tap (the server also ends the session)
 let LAST = Date.now();
 function sesSave(){ try { localStorage.setItem('wmS', JSON.stringify({ t: LAST, k: TOK })); } catch (e) {} }   // only the session token is kept on the phone, never the PIN
 function sesClear(){ try { localStorage.removeItem('wmS'); } catch (e) {} }
@@ -399,7 +400,7 @@ function logout(msg){
   try { if (msg) sessionStorage.setItem('wmMsg', msg); } catch (e) {}
   location.reload();
 }
-function idleCheck(){ if (PIN && Date.now() - LAST > IDLE_MS) logout('Logged out – no activity for 15 minutes'); }
+function idleCheck(){ if (PIN && Date.now() - LAST > IDLE_MS) logout('Logged out – no activity for 10 minutes'); }
 ['pointerdown', 'keydown', 'touchstart'].forEach(ev => document.addEventListener(ev, () => {
   if (!PIN) return; idleCheck(); if (!PIN) return;
   const n = Date.now(); if (n - LAST > 5000) { LAST = n; sesSave(); }
@@ -1119,7 +1120,7 @@ async function qSync(){
     while (q.length) {
       const it = q[0], args = it.args.slice(); args[0] = PIN;
       let r; try { r = await fetch(API, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ fn: it.fn, args: args, tok: TOK, dev: DEV }) }).then(x => x.json()); } catch (e) { break; }
-      if (!r.ok && r.error === 'SESSION_ENDED') break;
+      if (!r.ok && /^SESSION_(ENDED|IDLE)$/.test(r.error)) break;
       q.shift(); qSet(q); sent++;
       if (r.ok) { if (/Many$/.test(it.fn) && r.data && r.data.errors) r.data.errors.forEach(m => qFail(it, m)); }
       else qFail(it, r.error);
@@ -1286,12 +1287,18 @@ function ntGo(p){
 function lgLoad(){ if (!window._main) return; if (!$('lgTB').innerHTML) $('lgTB').innerHTML = tabBoxes('lgTc', []); call('listLogins', [PIN], lgDraw); }
 function lgDraw(r){
   window._lg = r.list;
-  $('lgL').innerHTML = '<table style="width:100%">' + r.list.map((x, i) => '<tr><td>' + (x.online ? '🟢 ' : '⚪ ') + '<b>' + esc(x.name) + '</b> <span class="hint">' + esc(x.main ? 'Main admin' : x.shift === 'ADMIN' ? 'Admin' : x.shift + ' supervisor') + (x.hasPin ? '' : ' · no PIN') + ' · ' + seenTxt(x.seen) + '</span>' + (x.tabs ? '<div class="hint">Pages: ' + (x.tabs.length === TAB_ALL.length ? 'all' : x.tabs.map(k => esc(TABNM[k])).join(', ')) + '</div>' : '') + '</td>' +
-    '<td style="text-align:right;white-space:nowrap">' + (x.main && !r.main ? '' : '<button class="grey sm" onclick="lgPin(' + i + ')">Set PIN</button>') + (x.main ? '' : ' <button class="grey sm" title="Notification bell" onclick="lgBell(\'' + x.id + '\', ' + !x.bell + ')">' + (x.bell ? '🔔' : '🔕') + '</button>') + (x.tabs ? ' <button class="grey sm" onclick="lgTabs(' + i + ')">Pages</button>' : '') + (x.main ? '' : ' <button class="out sm" onclick="lgDel(' + i + ')">Remove</button>') + '</td></tr>').join('') + '</table>' +
+  $('lgL').innerHTML = '<table style="width:100%">' + r.list.map((x, i) => '<tr><td>' + (x.online ? '🟢 ' : '⚪ ') + '<b>' + esc(x.name) + '</b> <span class="hint">' + esc(x.main ? 'Main admin' : x.shift === 'ADMIN' ? 'Admin' : x.shift + ' supervisor') + (x.hasPin ? '' : ' · no PIN') + ' · ' + seenTxt(x.seen) + ' · ' + phTxt(x.phones, x.main) + '</span>' + (x.tabs ? '<div class="hint">Pages: ' + (x.tabs.length === TAB_ALL.length ? 'all' : x.tabs.map(k => esc(TABNM[k])).join(', ')) + '</div>' : '') + '</td>' +
+    '<td style="text-align:right;white-space:nowrap">' + (x.main && !r.main ? '' : '<button class="grey sm" onclick="lgPin(' + i + ')">Set PIN</button>') +  (x.phones ? ' <button class="grey sm" onclick="lgPh(\'' + x.id + '\', \'' + esc(x.name) + '\', ' + !!x.main + ')">' + (x.main ? 'Keep this phone only' : 'Reset phone') + '</button>' : '') + (x.main ? '' : ' <button class="grey sm" title="Notification bell" onclick="lgBell(\'' + x.id + '\', ' + !x.bell + ')">' + (x.bell ? '🔔' : '🔕') + '</button>') + (x.tabs ? ' <button class="grey sm" onclick="lgTabs(' + i + ')">Pages</button>' : '') + (x.main ? '' : ' <button class="out sm" onclick="lgDel(' + i + ')">Remove</button>') + '</td></tr>').join('') + '</table>' +
     '<div class="hint">🟢 = logged in on a phone now · last active = last time he used the app · 🔔/🔕 = notification bell shown or hidden</div>' +
     '<div class="row" style="margin-top:8px;align-items:center"><span style="flex:1">All workers – notification bell</span><button class="grey sm" onclick="lgBell(\'workers\', ' + !r.workersBell + ')">' + (r.workersBell ? '🔔 On' : '🔕 Off') + '</button></div>' +
     (r.workers && r.workers.length ? '<div style="margin-top:10px"><b>👷 Workers using the app (' + r.workers.length + ')</b><table style="width:100%">' +
-      r.workers.map(w => '<tr><td>' + (w.online ? '🟢 ' : '⚪ ') + esc(w.name) + '</td><td class="hint" style="text-align:right">' + seenTxt(w.seen) + '</td></tr>').join('') + '</table></div>' : '');
+      r.workers.map(w => '<tr><td>' + (w.online ? '🟢 ' : '⚪ ') + esc(w.name) + '<div class="hint">' + seenTxt(w.seen) + ' · ' + phTxt(w.phones) + '</div></td><td style="text-align:right">' + (w.phones ? '<button class="grey sm" onclick="lgPh(\'W:' + esc(w.name) + '\', \'' + esc(w.name) + '\', false)">Reset phone</button>' : '') + '</td></tr>').join('') + '</table></div>' : '');
+}
+const phTxt = (n, main) => n ? '📱 ' + (main ? n + ' phone(s) linked' : 'phone linked') : '📱 no phone yet';
+function lgPh(id, name, main){
+  ask({ title: main ? 'Keep only this phone' : 'Reset phone – ' + name, names: [name], yes: main ? 'Keep this one' : 'Reset phone',
+        en: main ? 'Your other linked phones/computers are unlinked. Only this one stays.' : name + ' is logged out. The next phone he logs in on becomes his phone.' },
+    () => call('resetPhone', [PIN, id], r => { lgDraw(r); toast(main ? 'Only this phone is linked now' : name + ' can now log in on a new phone', true); }));
 }
 function seenTxt(t){
   if (!t) return 'never used';

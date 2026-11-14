@@ -1361,7 +1361,7 @@ function liveDraw(r){
   $('lvT').textContent = 'at ' + r.time + ' ';
   const tag = x => x.st === 'IN' ? '<span style="color:#2E7D32;font-weight:bold">🟢 In since ' + esc(x.inT) + '</span>'
     : x.st === 'OUT' ? '<span class="hint">⚪ ' + esc(x.inT) + '–' + esc(x.outT) + ' (left)</span>'
-    : x.st ? '<span style="color:#B26A00">🏖 ' + esc(LEAVE[x.st] || x.st) + '</span>'
+    : x.st ? '<span style="color:#B26A00">' + (x.st === 'SL' ? '💊' : x.st === 'AV' ? '✈️' : '🏖') + ' ' + esc(LEAVE[x.st] || x.st) + '</span>'
     : '<span style="color:#C62828">○ Not checked in</span>';
   $('lvL').innerHTML = r.shifts.slice().sort((a, b) => (b.now ? 1 : 0) - (a.now ? 1 : 0)).map(s => {
     const n = k => s.list.filter(x => k === 'LV' ? x.st && x.st !== 'IN' && x.st !== 'OUT' : k === '' ? !x.st : x.st === k).length;

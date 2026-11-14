@@ -282,11 +282,12 @@
       <div class="hint">Requested ahead in the worker app. The supervisor confirms first; you decide paid, unpaid or refuse. Approved leave is booked ahead – on those days the worker shows as on leave.</div>
       <div id="lrL" style="margin-top:8px">Loading…</div>
     </div>
-    <div class="card" data-pg="set">
+    <div class="card" data-pg="set" id="lgCard">
       <div class="row"><b style="flex:1">🔑 Logins &amp; PINs</b><button class="grey sm" onclick="lgLoad()">⟳</button></div>
       <div class="hint">PINs are stored coded – nobody can read them in the sheet. Changing a PIN logs that person out on his phone.</div>
       <div id="lgL" style="margin-top:8px">Loading…</div>
-      <div class="row" style="margin-top:10px"><select id="lgS"><option>DAY</option><option>NIGHT</option><option>ADMIN</option></select><input id="lgN" placeholder="Name" style="flex:1;min-width:110px"><input id="lgP" type="password" inputmode="numeric" autocomplete="new-password" placeholder="PIN (4–8 digits)" style="flex:1;min-width:110px"></div>
+      <div class="row" style="margin-top:10px"><select id="lgS" onchange="$('lgT').style.display = this.value === 'ADMIN' ? '' : 'none'"><option>DAY</option><option>NIGHT</option><option>ADMIN</option></select><input id="lgN" placeholder="Name" style="flex:1;min-width:110px"><input id="lgP" type="password" inputmode="numeric" autocomplete="new-password" placeholder="PIN (4–8 digits)" style="flex:1;min-width:110px"></div>
+      <div id="lgT" style="display:none;margin-top:6px"><div class="hint">Pages this admin can open:</div><div id="lgTB"></div></div>
       <button class="pri" style="width:100%;margin-top:6px" onclick="lgAdd()">+ Add login</button>
       <button class="out" style="width:100%;margin-top:10px" onclick="lgAll()">Log out all other phones</button>
     </div>
@@ -411,7 +412,7 @@ function doLogin(auto){
     TOK = r.tok; PIN = 'T:' + r.tok; $('pin').value = ''; LAST = Date.now(); sesSave(); $('lo').classList.remove('hidden');
     window._main = !!r.main; window._role = r.role; $('bell').classList.remove('hidden'); ntPoll(); if (r.role === 'SUP') setTimeout(() => { qBar(); qSync(); }, 500);
     $('login').classList.add('hidden');
-    if (r.role === 'ADMIN') { $('adm').classList.remove('hidden'); $('hdr').textContent = r.name || 'Admin'; loadStaff(); apLoad(); let p = 'att'; try { p = localStorage.getItem('admPg') || 'att'; } catch (e) {} pg(p); }
+    if (r.role === 'ADMIN') { $('adm').classList.remove('hidden'); $('hdr').textContent = r.name || 'Admin'; admTabs(r.tabs); loadStaff(); if (tabOk('appr')) apLoad(); let p = 'att'; try { p = localStorage.getItem('admPg') || 'att'; } catch (e) {} pg(p); }
     else if (r.role === 'WORKER') { $('wrk').classList.remove('hidden'); $('hdr').textContent = 'Hello ' + r.name; wkLoad(); }
     else { $('sup').classList.remove('hidden'); if (r.roster) render(r.roster); else refresh(); getLoc(() => {}, true); }   // ask location permission early
   }, e => { PIN = ''; $('login').classList.remove('hidden'); $('hdr').textContent = 'Enter your password'; if (auto) { sesClear(); $('pin').value = ''; } toast(e, false); });
@@ -1067,8 +1068,19 @@ function sigClear(){ const c = $('sigPad'), x = c.getContext('2d'); x.fillStyle 
   ['pointerup', 'pointercancel'].forEach(t => c.addEventListener(t, () => { down = false; }));
 })();
 /* ---- admin pages ---- */
+const TABNM = { live: '👷 Live', appr: '🔔 Approvals', task: '📋 Tasks', hr: '💼 HR', att: 'Attendance', staff: 'Staff', money: '💵 Advances & Loans', ls: 'Leave Salary', set: 'Settings' };
+const TAB_ALL = Object.keys(TABNM);
+const tabOk = p => (window._tabs || TAB_ALL).indexOf(p) >= 0;
+function admTabs(t){   // only the pages Haroon allowed for this admin
+  window._tabs = Array.isArray(t) && t.length ? t : TAB_ALL;
+  document.querySelectorAll('#tabs button').forEach(b => b.style.display = tabOk(b.dataset.p) ? '' : 'none');
+  $('lgCard').style.display = window._main ? '' : 'none';
+}
+const tabBoxes = (cls, sel) => TAB_ALL.map(k => '<label style="display:inline-flex;align-items:center;gap:4px;margin:3px 10px 3px 0;white-space:nowrap"><input type="checkbox" class="' + cls + '" value="' + k + '"' + (sel.indexOf(k) >= 0 ? ' checked' : '') + '>' + esc(TABNM[k]) + '</label>').join('');
+const tabPicked = cls => [...document.querySelectorAll('.' + cls + ':checked')].map(c => c.value);
 function pg(p){
-  document.querySelectorAll('#adm [data-pg]').forEach(c => c.style.display = c.dataset.pg === p ? '' : 'none');
+  if (!tabOk(p)) p = window._tabs[0];
+  document.querySelectorAll('#adm [data-pg]').forEach(c => c.style.display = c.dataset.pg === p && !(c.id === 'lgCard' && !window._main) ? '' : 'none');
   document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.p === p));
   try { localStorage.setItem('admPg', p); } catch (e) {}
   if (p === 'ls') lsrLoad();
@@ -1271,12 +1283,21 @@ function ntGo(p){
   else refresh();
 }
 /* ---- 🔑 Logins & PINs (admin) ---- */
-function lgLoad(){ call('listLogins', [PIN], lgDraw); }
+function lgLoad(){ if (!window._main) return; if (!$('lgTB').innerHTML) $('lgTB').innerHTML = tabBoxes('lgTc', []); call('listLogins', [PIN], lgDraw); }
 function lgDraw(r){
   window._lg = r.list;
-  $('lgL').innerHTML = '<table style="width:100%">' + r.list.map((x, i) => '<tr><td>' + (x.online ? '🟢 ' : '⚪ ') + '<b>' + esc(x.name) + '</b> <span class="hint">' + esc(x.main ? 'Main admin' : x.shift === 'ADMIN' ? 'Admin' : x.shift + ' supervisor') + (x.hasPin ? '' : ' · no PIN') + '</span></td>' +
-    '<td style="text-align:right;white-space:nowrap">' + (x.main && !r.main ? '' : '<button class="grey sm" onclick="lgPin(' + i + ')">Set PIN</button>') + (x.main ? '' : ' <button class="out sm" onclick="lgDel(' + i + ')">Remove</button>') + '</td></tr>').join('') + '</table>' +
-    '<div class="hint">🟢 = logged in on a phone now</div>';
+  $('lgL').innerHTML = '<table style="width:100%">' + r.list.map((x, i) => '<tr><td>' + (x.online ? '🟢 ' : '⚪ ') + '<b>' + esc(x.name) + '</b> <span class="hint">' + esc(x.main ? 'Main admin' : x.shift === 'ADMIN' ? 'Admin' : x.shift + ' supervisor') + (x.hasPin ? '' : ' · no PIN') + ' · ' + seenTxt(x.seen) + '</span>' + (x.tabs ? '<div class="hint">Pages: ' + (x.tabs.length === TAB_ALL.length ? 'all' : x.tabs.map(k => esc(TABNM[k])).join(', ')) + '</div>' : '') + '</td>' +
+    '<td style="text-align:right;white-space:nowrap">' + (x.main && !r.main ? '' : '<button class="grey sm" onclick="lgPin(' + i + ')">Set PIN</button>') + (x.tabs ? ' <button class="grey sm" onclick="lgTabs(' + i + ')">Pages</button>' : '') + (x.main ? '' : ' <button class="out sm" onclick="lgDel(' + i + ')">Remove</button>') + '</td></tr>').join('') + '</table>' +
+    '<div class="hint">🟢 = logged in on a phone now · last active = last time he used the app</div>' +
+    (r.workers && r.workers.length ? '<div style="margin-top:10px"><b>👷 Workers using the app (' + r.workers.length + ')</b><table style="width:100%">' +
+      r.workers.map(w => '<tr><td>' + (w.online ? '🟢 ' : '⚪ ') + esc(w.name) + '</td><td class="hint" style="text-align:right">' + seenTxt(w.seen) + '</td></tr>').join('') + '</table></div>' : '');
+}
+function seenTxt(t){
+  if (!t) return 'never used';
+  const d = new Date(t), m = Math.round((Date.now() - t) / 60000);
+  if (m < 3) return 'active now'; if (m < 60) return 'active ' + m + ' min ago';
+  const hh = d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+  return 'last active ' + (new Date().toDateString() === d.toDateString() ? 'today ' : d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) + ' ') + hh;
 }
 function lgPin(i){
   const x = window._lg[i];
@@ -1289,7 +1310,18 @@ function lgDel(i){
   ask({ title: 'Remove login', warn: true, names: [x.name], yes: 'Remove', en: x.name + ' will be logged out and can no longer log in.' },
     () => call('removeLogin', [PIN, x.id], r => { lgDraw(r); toast(x.name + ' removed', true); }));
 }
-function lgAdd(){ call('addLogin', [PIN, $('lgS').value, $('lgN').value, $('lgP').value], r => { lgDraw(r); $('lgN').value = ''; $('lgP').value = ''; toast('Login added', true); }); }
+function lgAdd(){
+  const adm = $('lgS').value === 'ADMIN', t = tabPicked('lgTc');
+  if (adm && !t.length) { toast('Tick at least one page for this admin', false); return; }
+  call('addLogin', [PIN, $('lgS').value, $('lgN').value, $('lgP').value, t], r => { lgDraw(r); $('lgN').value = ''; $('lgP').value = ''; $('lgTB').innerHTML = tabBoxes('lgTc', []); toast('Login added', true); });
+}
+function lgTabs(i){
+  const x = window._lg[i];
+  ask({ title: 'Pages – ' + x.name, names: [x.name], yes: 'Save', en: 'Tick the pages ' + x.name + ' can open. The change works on his next action – no need to log him out.',
+        html: '<div style="margin:6px 0">' + tabBoxes('lgEc', x.tabs) + '</div>' },
+    () => { const t = tabPicked('lgEc'); if (!t.length) { toast('Tick at least one page', false); return; }
+      call('setAccess', [PIN, x.id, t], r => { lgDraw(r); toast('Pages saved for ' + x.name, true); }); });
+}
 function lgAll(){
   ask({ title: 'Log out all other phones', warn: true, yes: 'Log out all', en: 'Every supervisor and admin phone except this one is logged out. They log in again with their PIN.' },
     () => call('logoutAll', [PIN], m => { toast(m, true); lgLoad(); }));

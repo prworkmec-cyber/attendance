@@ -410,7 +410,7 @@ function doLogin(auto){
   if (!auto) PIN = $('pin').value.trim();
   call('login', [PIN], r => {
     TOK = r.tok; PIN = 'T:' + r.tok; $('pin').value = ''; LAST = Date.now(); sesSave(); $('lo').classList.remove('hidden');
-    window._main = !!r.main; window._role = r.role; $('bell').classList.remove('hidden'); ntPoll(); if (r.role === 'SUP') setTimeout(() => { qBar(); qSync(); }, 500);
+    window._main = !!r.main; window._role = r.role; if (r.bell === false) $('bell').classList.add('hidden'); else { $('bell').classList.remove('hidden'); ntPoll(); } if (r.role === 'SUP') setTimeout(() => { qBar(); qSync(); }, 500);
     $('login').classList.add('hidden');
     if (r.role === 'ADMIN') { $('adm').classList.remove('hidden'); $('hdr').textContent = r.name || 'Admin'; admTabs(r.tabs); loadStaff(); if (tabOk('appr')) apLoad(); let p = 'att'; try { p = localStorage.getItem('admPg') || 'att'; } catch (e) {} pg(p); }
     else if (r.role === 'WORKER') { $('wrk').classList.remove('hidden'); $('hdr').textContent = 'Hello ' + r.name; wkLoad(); }
@@ -1287,8 +1287,9 @@ function lgLoad(){ if (!window._main) return; if (!$('lgTB').innerHTML) $('lgTB'
 function lgDraw(r){
   window._lg = r.list;
   $('lgL').innerHTML = '<table style="width:100%">' + r.list.map((x, i) => '<tr><td>' + (x.online ? '🟢 ' : '⚪ ') + '<b>' + esc(x.name) + '</b> <span class="hint">' + esc(x.main ? 'Main admin' : x.shift === 'ADMIN' ? 'Admin' : x.shift + ' supervisor') + (x.hasPin ? '' : ' · no PIN') + ' · ' + seenTxt(x.seen) + '</span>' + (x.tabs ? '<div class="hint">Pages: ' + (x.tabs.length === TAB_ALL.length ? 'all' : x.tabs.map(k => esc(TABNM[k])).join(', ')) + '</div>' : '') + '</td>' +
-    '<td style="text-align:right;white-space:nowrap">' + (x.main && !r.main ? '' : '<button class="grey sm" onclick="lgPin(' + i + ')">Set PIN</button>') + (x.tabs ? ' <button class="grey sm" onclick="lgTabs(' + i + ')">Pages</button>' : '') + (x.main ? '' : ' <button class="out sm" onclick="lgDel(' + i + ')">Remove</button>') + '</td></tr>').join('') + '</table>' +
-    '<div class="hint">🟢 = logged in on a phone now · last active = last time he used the app</div>' +
+    '<td style="text-align:right;white-space:nowrap">' + (x.main && !r.main ? '' : '<button class="grey sm" onclick="lgPin(' + i + ')">Set PIN</button>') + (x.main ? '' : ' <button class="grey sm" title="Notification bell" onclick="lgBell(\'' + x.id + '\', ' + !x.bell + ')">' + (x.bell ? '🔔' : '🔕') + '</button>') + (x.tabs ? ' <button class="grey sm" onclick="lgTabs(' + i + ')">Pages</button>' : '') + (x.main ? '' : ' <button class="out sm" onclick="lgDel(' + i + ')">Remove</button>') + '</td></tr>').join('') + '</table>' +
+    '<div class="hint">🟢 = logged in on a phone now · last active = last time he used the app · 🔔/🔕 = notification bell shown or hidden</div>' +
+    '<div class="row" style="margin-top:8px;align-items:center"><span style="flex:1">All workers – notification bell</span><button class="grey sm" onclick="lgBell(\'workers\', ' + !r.workersBell + ')">' + (r.workersBell ? '🔔 On' : '🔕 Off') + '</button></div>' +
     (r.workers && r.workers.length ? '<div style="margin-top:10px"><b>👷 Workers using the app (' + r.workers.length + ')</b><table style="width:100%">' +
       r.workers.map(w => '<tr><td>' + (w.online ? '🟢 ' : '⚪ ') + esc(w.name) + '</td><td class="hint" style="text-align:right">' + seenTxt(w.seen) + '</td></tr>').join('') + '</table></div>' : '');
 }
@@ -1315,6 +1316,7 @@ function lgAdd(){
   if (adm && !t.length) { toast('Tick at least one page for this admin', false); return; }
   call('addLogin', [PIN, $('lgS').value, $('lgN').value, $('lgP').value, t], r => { lgDraw(r); $('lgN').value = ''; $('lgP').value = ''; $('lgTB').innerHTML = tabBoxes('lgTc', []); toast('Login added', true); });
 }
+function lgBell(id, on){ call('setBell', [PIN, id, on], r => { lgDraw(r); toast('Notification bell ' + (on ? 'shown' : 'hidden') + ' – works from his next app opening', true); }); }
 function lgTabs(i){
   const x = window._lg[i];
   ask({ title: 'Pages – ' + x.name, names: [x.name], yes: 'Save', en: 'Tick the pages ' + x.name + ' can open. The change works on his next action – no need to log him out.',

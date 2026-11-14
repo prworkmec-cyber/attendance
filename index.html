@@ -153,6 +153,11 @@
       <div class="row"><b style="flex:1">👷 Who is at work now</b><span class="hint" id="lvT"></span><button class="grey sm" onclick="liveLoad()">⟳ Refresh</button></div>
       <div id="lvL" style="margin-top:8px">Loading…</div>
     </div>
+    <div class="card" data-pg="live">
+      <div class="row"><b style="flex:1">🏖 Leaves taken</b><select id="lvsP" onchange="lvsLoad()"><option value="month">This month</option><option value="last">Last month</option><option value="year">This year</option></select></div>
+      <div class="hint">Sick, emergency, personal, warning leave and other leave days. Annual vacation is not counted.</div>
+      <div id="lvsL" style="margin-top:8px">Loading…</div>
+    </div>
     <div class="card" data-pg="hr">
       <div class="row"><b style="flex:1" id="hrT">Payroll</b><button class="grey sm" onclick="hrUpd()">⟳ Update now</button></div>
       <div class="hint">Slips update by themselves every morning at 08:00. Tap a worker to open his payslip.</div>
@@ -1090,7 +1095,7 @@ function pg(p){
   if (p === 'att') attShow();
   if (p === 'task') tkLoad();
   if (p === 'hr') hrLoad();
-  if (p === 'live') liveLoad();
+  if (p === 'live') { liveLoad(); lvsLoad(); }
 }
 /* ---- 📶 NO INTERNET: check-in/out taps are kept on this phone with their time and sent when the internet is back ---- */
 const qGet = k => { try { return JSON.parse(localStorage.getItem(k || 'wmQ') || '[]'); } catch (e) { return []; } };
@@ -1340,6 +1345,18 @@ function lgAll(){
 }
 /* ---- 👷 Live: both shifts, who is in / out / on leave / not in yet ---- */
 function liveLoad(){ call('adminLive', [PIN], liveDraw); }
+function lvsLoad(){ call('leaveStats', [PIN, $('lvsP').value], lvsDraw); }
+function lvsDraw(r){
+  const dd = s => new Date(s + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }), per = dd(r.from) + ' – ' + dd(r.to);
+  if (!r.total) { $('lvsL').innerHTML = '<div class="hint">No leave taken ' + esc(per) + ' 👍</div>'; return; }
+  const cs = r.codes.filter(c => c.n);
+  $('lvsL').innerHTML = '<div style="margin-bottom:6px"><b>' + r.total + ' day(s)</b> <span class="hint">' + esc(per) + '</span><br>' +
+      cs.map(c => '<span class="flag" style="margin:2px 4px 2px 0;display:inline-block">' + esc(c.k) + ' ' + esc(c.name) + ': <b>' + c.n + '</b></span>').join('') + '</div>' +
+    '<div style="overflow-x:auto"><table style="width:100%"><tr><th style="text-align:left">Worker</th>' + cs.map(c => '<th>' + esc(c.k) + '</th>').join('') + '<th>Total</th><th>Unpaid</th></tr>' +
+      r.workers.map(w => '<tr><td>' + esc(w.name) + ' <span class="hint">' + esc(w.shift) + '</span></td>' + cs.map(c => '<td style="text-align:center">' + (w[c.k] || '') + '</td>').join('') +
+        '<td style="text-align:center"><b>' + w.total + '</b></td><td style="text-align:center">' + (w.unpaid || '') + (w.pending ? ' <span class="hint">(' + w.pending + ' waiting)</span>' : '') + '</td></tr>').join('') +
+    '</table></div>';
+}
 function liveDraw(r){
   $('lvT').textContent = 'at ' + r.time + ' ';
   const tag = x => x.st === 'IN' ? '<span style="color:#2E7D32;font-weight:bold">🟢 In since ' + esc(x.inT) + '</span>'

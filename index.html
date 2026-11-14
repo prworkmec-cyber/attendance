@@ -1644,7 +1644,7 @@ function drawStaff(rows){
   ['vWorker', 'lWorker', 'pvWorker', 'pnWorker', 'wnWorker'].forEach(id => { const k = $(id).value; $(id).innerHTML = opts; $(id).value = k; });
   if (!$('vDate').value) $('vDate').value = $('aDate').value;
   if (!$('lDate').value) $('lDate').value = $('aDate').value;
-  if (!window._advLoaded) { window._advLoaded = 1; vLoad(); lLoad(); }
+  if (!window._advLoaded && tabOk('money')) { window._advLoaded = 1; vLoad(); lLoad(); }   // only for admins allowed on Advances & Loans
 }
 function stEdit(i){
   const r = window._staff[i];

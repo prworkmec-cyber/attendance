@@ -165,7 +165,7 @@ button.wait{opacity:.5;filter:grayscale(1);cursor:progress;pointer-events:none}
 
   <div id="adm" class="hidden">
     <div class="tabs" id="tabs">
-      <button data-p="dash" onclick="pg('dash')">📊 Dashboard</button><button data-p="live" onclick="pg('live')">👷 Live</button><button data-p="appr" onclick="pg('appr')">🔔 Approvals<span id="apBadge" class="apb"></span></button><button data-p="task" onclick="pg('task')">📋 Tasks</button><button data-p="hr" onclick="pg('hr')">💼 HR</button><button data-p="att" onclick="pg('att')">Attendance</button><button data-p="staff" onclick="pg('staff')">Staff</button><button data-p="money" onclick="pg('money')">💵 Advances &amp; Loans</button><button data-p="ls" onclick="pg('ls')">✈ Vacations</button><button data-p="co" onclick="pg('co')">🏢 Company</button><button data-p="set" onclick="pg('set')">Settings</button>
+      <button data-p="dash" onclick="pg('dash')">📊 Dashboard</button><button data-p="live" onclick="pg('live')">👷 Live</button><button data-p="appr" onclick="pg('appr')">🔔 Approvals<span id="apBadge" class="apb"></span></button><button data-p="task" onclick="pg('task')">📋 Tasks</button><button data-p="hr" onclick="pg('hr')">💼 HR</button><button data-p="att" onclick="pg('att')">Attendance</button><button data-p="staff" onclick="pg('staff')">Staff</button><button data-p="money" onclick="pg('money')">💵 Advances &amp; Loans</button><button data-p="ls" onclick="pg('ls')">✈ Vacations</button><button data-p="pro" onclick="pg('pro')">🛂 PRO</button><button data-p="co" onclick="pg('co')">🏢 Company</button><button data-p="set" onclick="pg('set')">Settings</button>
     </div>
     <div class="card" data-pg="live">
       <div class="row"><b style="flex:1">👷 Who is at work now</b><span class="hint" id="lvT"></span><button class="grey sm" onclick="liveLoad()">⟳ Refresh</button></div>
@@ -320,6 +320,23 @@ button.wait{opacity:.5;filter:grayscale(1);cursor:progress;pointer-events:none}
       <b>📝 Leave requests from workers</b>
       <div class="hint">Requested ahead in the worker app. The supervisor confirms first; you decide paid, unpaid or refuse. Approved leave is booked ahead – on those days the worker shows as on leave.</div>
       <div id="lrL" style="margin-top:8px">Loading…</div>
+    </div>
+    <div class="card" data-pg="pro">
+      <div class="row"><b style="flex:1">🛂 PRO – overview</b><button class="grey sm" onclick="proLoad()">⟳</button></div>
+      <div id="proSum" style="margin-top:6px">Loading…</div>
+    </div>
+    <div class="card" data-pg="pro">
+      <b>➡ What to do next</b> <span class="hint">– sorted by date, late ones in red</span>
+      <div id="proNext" style="margin-top:6px">Loading…</div>
+    </div>
+    <div class="card" data-pg="pro">
+      <b>⚠ Coming up – no case yet</b> <span class="hint">– visas (from staff profiles) and company licences expiring in 60 days</span>
+      <div id="proSug" style="margin-top:6px">Loading…</div>
+    </div>
+    <div class="card" data-pg="pro">
+      <div class="row"><b style="flex:1">📂 Cases</b><button class="pri sm" onclick="proNew()">➕ New case</button></div>
+      <div id="proF" style="margin-top:6px"></div>
+      <div id="proL">Loading…</div>
     </div>
     <div class="card" data-pg="co">
       <div class="row"><b style="flex:1">⚠ Company documents expiring (30 days)</b><button class="grey sm" onclick="coLoad()">⟳</button></div>
@@ -1305,7 +1322,7 @@ function sigClear(){ const c = $('sigPad'), x = c.getContext('2d'); x.fillStyle 
   ['pointerup', 'pointercancel'].forEach(t => c.addEventListener(t, () => { down = false; }));
 })();
 /* ---- admin pages ---- */
-const TABNM = { live: '👷 Live', appr: '🔔 Approvals', task: '📋 Tasks', hr: '💼 HR', att: 'Attendance', staff: 'Staff', money: '💵 Advances & Loans', ls: '✈ Vacations', co: '🏢 Company', set: 'Settings' };
+const TABNM = { live: '👷 Live', appr: '🔔 Approvals', task: '📋 Tasks', hr: '💼 HR', att: 'Attendance', staff: 'Staff', money: '💵 Advances & Loans', ls: '✈ Vacations', pro: '🛂 PRO', co: '🏢 Company', set: 'Settings' };
 const TAB_ALL = Object.keys(TABNM);
 const tabOk = p => p === 'dash' || (window._tabs || TAB_ALL).indexOf(p) >= 0;
 function admTabs(t){   // only the pages Haroon allowed for this admin
@@ -1324,6 +1341,7 @@ function pg(p){
   if (p === 'set') { lgLoad(); wpDraw(); }
   if (p === 'staff') prLoad();
   if (p === 'co') coLoad();
+  if (p === 'pro') proLoad();
   if (p === 'dash') dsLoad();
   if (p === 'appr') apLoad();
   if (p === 'att') attShow();
@@ -1871,6 +1889,80 @@ function dqDec(k, ok){
     f => call('docReqDecide', [PIN, x.id, false, f.txt], l => { dqDraw(l); toast('Sent back', true); }));
 }
 /* ---- 🏢 Company documents ---- */
+/* ---- 🛂 PRO: visas, renewals, cancellations, licences / permits, fees (Haroon 16 Nov) ---- */
+function proLoad(){ call('proList', [PIN], proDraw); }
+let PRO_F = 'Open';
+function proDraw(r){
+  window._pro = r;
+  const c = r.cases, op = c.filter(x => x.status === 'Open'), big = (n, l, col) => '<div class="dsn"><b style="color:' + (col || 'var(--blue)') + '">' + n + '</b><span>' + l + '</span></div>';
+  const visa = t => c.filter(x => x.type === t);
+  $('proSum').innerHTML = '<div class="dsr">' + big(op.length, 'Open cases') + big(op.filter(x => x.late).length, 'Late', op.some(x => x.late) ? '#C62828' : '#666') + big(c.filter(x => x.status === 'On hold').length, 'On hold', '#B26A00') + big(hrAed(r.feeYear).replace('AED ', ''), 'Fees ' + r.today.slice(0, 4) + ' (AED)') + '</div>' +
+    '<table style="width:100%;margin-top:6px;font-size:14px"><tr><th style="text-align:left">Type</th><th>Open</th><th>Done</th><th>Total</th></tr>' +
+    Object.keys(r.types).map(t => { const l = visa(t); return l.length ? '<tr><td>' + esc(t) + '</td><td style="text-align:center"><b>' + l.filter(x => x.status === 'Open' || x.status === 'On hold').length + '</b></td><td style="text-align:center">' + l.filter(x => x.status === 'Done').length + '</td><td style="text-align:center">' + l.length + '</td></tr>' : ''; }).join('') + '</table>';
+  const nx = op.filter(x => x.next || x.cur).sort((a, b) => (a.nextDate || '9').localeCompare(b.nextDate || '9'));
+  $('proNext').innerHTML = !nx.length ? '<div class="hint">Nothing pending 👍</div>' : nx.map(x => '<div style="padding:5px 0;border-bottom:1px solid var(--line);cursor:pointer' + (x.late ? ';background:#FFF1F0' : '') + '" onclick="proOpen(\'' + x.id + '\')">' +
+    av(x.who) + '<b>' + esc(x.who) + '</b> <span class="hint">' + esc(x.type) + '</span><div class="hint">➡ ' + esc(x.next || 'Next step: ' + x.cur) + (x.nextDate ? ' · <b' + (x.late ? ' style="color:#C62828"' : '') + '>' + esc(niceD(x.nextDate)) + (x.nextDate < r.today ? ' – LATE' : '') + '</b>' : '') + '</div></div>').join('');
+  $('proSug').innerHTML = !r.sug.length ? '<div class="hint">No visa or licence expires in the next 60 days without a case 👍</div>' : r.sug.map((x, k) => '<div class="row" style="padding:4px 0;border-bottom:1px solid var(--line);align-items:center"><span style="flex:1">' +
+    (x.type === 'Visa renewal' ? av(x.who) : '🏢 ') + '<b>' + esc(x.who) + '</b> <span class="hint">' + esc(x.why) + '</span></span><button class="pri sm" onclick="proNew(\'' + esc(x.type) + '\',' + k + ')">Start ' + (x.type === 'Visa renewal' ? 'renewal' : 'renewal') + '</button></div>').join('');
+  const fl = ['Open', 'On hold', 'Done', 'Cancelled', 'All'];
+  $('proF').innerHTML = fl.map(f => '<button class="' + (PRO_F === f ? 'pri' : 'grey') + ' sm" style="margin:0 4px 4px 0" onclick="PRO_F=\'' + f + '\';proDraw(window._pro)">' + f + ' (' + (f === 'All' ? c.length : c.filter(x => x.status === f).length) + ')</button>').join('');
+  const ls = c.filter(x => PRO_F === 'All' || x.status === PRO_F);
+  $('proL').innerHTML = !ls.length ? '<div class="hint">No case here.</div>' : ls.map(x => '<div style="padding:8px 0;border-bottom:1px solid var(--line);cursor:pointer" onclick="proOpen(\'' + x.id + '\')">' +
+    '<div class="row" style="align-items:center"><span style="flex:1">' + av(x.who) + '<b>' + esc(x.who) + '</b> <span class="hint">' + esc(x.type) + '</span></span><span class="hint">' + x.done + '/' + x.steps.length + '</span></div>' +
+    '<div style="height:6px;background:#E5E7EB;border-radius:3px;margin:4px 0"><div style="height:6px;border-radius:3px;background:' + (x.status === 'Done' ? '#2E7D32' : x.late ? '#C62828' : '#1F6FB2') + ';width:' + Math.round(100 * x.done / Math.max(1, x.steps.length)) + '%"></div></div>' +
+    '<div class="hint">' + (x.status === 'Done' ? '✅ Done' : x.status !== 'Open' ? esc(x.status) : 'Now: ' + esc(x.cur || '–')) + (x.target ? ' · target ' + esc(niceD(x.target)) : '') + (x.feeTotal ? ' · fees ' + hrAed(x.feeTotal) : '') + '</div></div>').join('');
+}
+/** New case (type + worker / document). */
+function proNew(type, k){
+  const r = window._pro, s = k !== undefined ? r.sug[k] : null;
+  ask({ title: '🛂 New PRO case', yes: 'Open case', en: 'The steps come ready for the type – you can rename, add or remove steps inside the case.',
+    html: '<label style="display:block;margin-top:6px">Type<select id="pnT" style="width:100%" onchange="proWho()">' + Object.keys(r.types).map(t => '<option' + (t === (type || 'New visa') ? ' selected' : '') + '>' + esc(t) + '</option>').join('') + '</select></label>' +
+      '<div id="pnW"></div>' + prF('pnN', 'First next action (optional)', '') + prF('pnD', 'Next action date', '', 'date') + prF('pnG', 'Target date to finish (optional)', '', 'date') },
+    () => { const who = ($('pnWs') && $('pnWs').value) || ($('pnWt') && $('pnWt').value.trim()) || '';
+      if (!who) { toast('Choose the worker / write the document', false); return; }
+      call('proSave', [PIN, '', { type: $('pnT').value, who: who, next: $('pnN').value, nextDate: $('pnD').value, target: $('pnG').value }], x => { proDraw(x); toast('Case opened', true); }); });
+  proWho(s ? s.who : '');
+}
+function proWho(v){
+  const t = $('pnT').value, staff = /visa/i.test(t);
+  $('pnW').innerHTML = staff ? '<label style="display:block;margin-top:6px">Worker<select id="pnWs" style="width:100%"><option value="">— choose</option>' + window._pro.people.map(n => '<option' + (n === v ? ' selected' : '') + '>' + esc(n) + '</option>').join('') + '<option value="">(new worker – type below)</option></select></label>' + prF('pnWt', 'New worker name (not in the staff list yet)', '')
+    : prF('pnWt', t === 'Licence / permit' ? 'Licence / permit (e.g. Trade licence)' : 'For (name / subject)', v || '');
+}
+/** One case: steps to tick, next action, fees, history. */
+function proOpen(id){
+  const r = window._pro, x = r.cases.find(c => c.id === id); if (!x) return;
+  ask({ title: '🛂 ' + x.who + ' – ' + x.type, noYes: true, en: 'Started ' + niceD(x.start) + ' · ' + x.status,
+    html: '<div style="margin-top:6px"><b>Steps</b> <span class="hint">(tap to tick – today\'s date and your name are saved)</span>' +
+      x.steps.map((s, k) => '<label style="display:flex;gap:8px;align-items:flex-start;padding:6px 0;border-bottom:1px solid var(--line)"><input type="checkbox" class="chk"' + (s.d ? ' checked' : '') + ' onchange="proTick(\'' + id + '\',' + k + ',this.checked)">' +
+        '<span style="flex:1' + (s.d ? ';color:#2E7D32' : '') + '">' + esc(s.n) + (s.d ? '<div class="hint">✓ ' + esc(niceD(s.d)) + ' · ' + esc(s.by) + (s.note ? ' · ' + esc(s.note) : '') + '</div>' : '') + '</span></label>').join('') +
+      '<button class="grey sm" style="margin-top:6px" onclick="proSteps(\'' + id + '\')">✎ Rename / add / remove steps</button></div>' +
+      '<div style="margin-top:12px"><b>➡ Next action</b>' + prF('poN', 'What to do next', x.next) + '<div class="row"><span style="flex:1">' + prF('poD', 'Next action date', x.nextDate, 'date') + '</span><span style="flex:1">' + prF('poG', 'Target date', x.target, 'date') + '</span></div>' +
+      '<label style="display:block;margin-top:6px">Status<select id="poS" style="width:100%">' + r.statuses.map(s => '<option' + (s === x.status ? ' selected' : '') + '>' + s + '</option>').join('') + '</select></label>' + prF('poT', 'Note for the history (optional)', '') +
+      '<button class="pri" style="width:100%;margin-top:8px" onclick="proUpd(\'' + id + '\')">💾 Save</button></div>' +
+      '<div style="margin-top:12px"><b>💳 Fees</b> ' + (x.feeTotal ? '<span class="hint">total ' + hrAed(x.feeTotal) + '</span>' : '') +
+      x.fees.map(f => '<div class="hint" style="margin:3px 0">' + esc(niceD(f.ds)) + ' · ' + esc(f.item) + ' · <b>' + hrAed(f.amt) + '</b>' + (f.file ? ' · <a href="#" onclick="call(\'proFeeFile\', [PIN, \'' + f.id + '\'], fileShow);return false">receipt</a>' : '') + ' · <a href="#" style="color:#C62828" onclick="proFeeDel(\'' + f.id + '\',\'' + id + '\');return false">remove</a></div>').join('') +
+      '<button class="grey sm" style="margin-top:6px" onclick="proFeeAdd(\'' + id + '\')">➕ Add fee</button></div>' +
+      (x.log.length ? '<details style="margin-top:12px"><summary><b>📜 History (' + x.log.length + ')</b></summary><div class="hint" style="white-space:pre-wrap">' + esc(x.log.slice().reverse().join('\n')) + '</div></details>' : '') +
+      '<button class="out sm" style="margin-top:12px" onclick="proDelGo(\'' + id + '\')">🗑 Remove case</button>' });
+}
+const proRe = id => x => { proDraw(x); if ($('modal').style.display === 'flex') proOpen(id); };
+function proTick(id, k, on){ call('proStep', [PIN, id, k, on, ''], x => { proRe(id)(x); toast(on ? 'Step done ✓' : 'Step undone', true); }, e => { toast(e, false); proOpen(id); }); }
+function proUpd(id){ call('proSave', [PIN, id, { next: $('poN').value, nextDate: $('poD').value, target: $('poG').value, status: $('poS').value, note: $('poT').value }], x => { proRe(id)(x); toast('Saved', true); }); }
+function proSteps(id){
+  const x = window._pro.cases.find(c => c.id === id);
+  ask({ title: '✎ Steps – ' + x.who, yes: 'Save steps', en: 'One step per line, in order. Ticked steps keep their date if the name stays the same.',
+    html: '<textarea id="psT" rows="10" style="width:100%;font-family:inherit;font-size:15px">' + esc(x.steps.map(s => s.n).join('\n')) + '</textarea>' },
+    () => call('proSave', [PIN, id, { stepNames: $('psT').value.split('\n') }], y => { proDraw(y); proOpen(id); toast('Steps saved', true); }), () => proOpen(id));
+}
+function proFeeAdd(id){
+  ask({ title: '💳 Fee paid', yes: 'Save fee', en: 'Government / typing fee for this case. A receipt photo or PDF is optional.',
+    html: prF('pfI', 'For (e.g. Entry permit, Medical, EID)', '') + '<div class="row"><span style="flex:1">' + prF('pfA', 'Amount (AED)', '', 'number') + '</span><span style="flex:1">' + prF('pfD', 'Date', window._pro.today, 'date') + '</span></div>' +
+      '<label class="grey sm" style="display:inline-block;margin-top:8px;padding:6px 12px;border-radius:8px;background:#6B7280;color:#fff;cursor:pointer">📷 Receipt<input id="pfF" type="file" accept="image/*,application/pdf" style="display:none" onchange="this.parentNode.nextElementSibling.textContent = this.files[0] ? \'✓ \' + this.files[0].name : \'\'"></label> <span class="hint"></span>' },
+    async () => { let data = ''; try { data = await fileData($('pfF').files[0]); } catch (e) { toast(String(e), false); return; }
+      call('proFee', [PIN, id, { item: $('pfI').value, amount: $('pfA').value, ds: $('pfD').value, data: data }], x => { proRe(id)(x); proOpen(id); toast('Fee saved', true); }); }, () => proOpen(id));
+}
+function proFeeDel(fid, id){ ask({ title: 'Remove this fee?', yes: 'Remove', warn: true, en: 'It is kept in the PRO_FEES tab marked Removed.' }, () => call('proFeeDel', [PIN, fid], x => { proDraw(x); proOpen(id); toast('Removed', true); }), () => proOpen(id)); }
+function proDelGo(id){ ask({ title: 'Remove this case?', yes: 'Remove', warn: true, en: 'It is hidden from the list (kept in the PRO_CASES tab marked Removed).' }, () => call('proDel', [PIN, id], x => { proDraw(x); toast('Case removed', true); }), () => proOpen(id)); }
 function coLoad(){ call('coList', [PIN], coDraw); }
 function coDraw(l){
   window._co = l;
@@ -1923,6 +2015,8 @@ function dsDraw(d){
       (v.nodate ? '<div class="hint">❓ ' + v.nodate + ' without joining date / history</div>' : ''))); }
   if (d.exp) h += box(tabOk('staff') ? 'staff' : 'co', '📄 Documents expiring (30 days)', err(d.exp) || (!d.exp.length ? '<div class="hint">Nothing expires in the next 30 days 👍</div>' :
       d.exp.map(x => '<div>' + (x.days < 0 ? '🔴' : x.days <= 15 ? '🟠' : '🟡') + ' <b>' + av(x.name) + esc(x.name) + '</b> – ' + esc(x.doc) + ' · ' + esc(niceDY(x.exp)) + ' <span class="hint">(' + (x.days < 0 ? 'expired' : x.days + ' d') + ')</span></div>').join('')), d.exp.length > 0);
+  if (d.pro) h += box('pro', '🛂 PRO', err(d.pro) || ('<div class="dsr">' + big(d.pro.open, 'Open cases') + big(d.pro.visas, 'New visas') + big(d.pro.due.length, 'Due now', d.pro.due.length ? '#C62828' : '#666') + '</div>' +
+      d.pro.due.map(x => '<div class="hint">' + (x.late ? '🔴 ' : '➡ ') + esc(x.who) + ' – ' + esc(x.next) + '</div>').join('')), d.pro.due && d.pro.due.length > 0);
   if (d.pay) h += box('hr', '💼 Payroll – ' + esc(d.pay.label || ''), err(d.pay) || ('<div class="dsr">' + big(hrAed(d.pay.total).replace('AED ', ''), 'Workers so far (AED)') + big(hrAed(d.pay.mgTotal).replace('AED ', ''), 'Management (AED)') + '</div>' +
       '<div class="hint">' + d.pay.workers + ' workers · advances / loans / deductions ' + hrAed(d.pay.ded) + ' · month closes ' + esc(d.pay.closeOn) + '</div>'));
   $('dsB').innerHTML = '<div class="hint" style="margin-bottom:6px">Updated ' + esc(d.now) + ' <button class="grey sm" onclick="dsLoad()">⟳ Refresh</button></div><div class="dsg">' + h + '</div>';

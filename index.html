@@ -1372,7 +1372,7 @@ function prDraw(){
     r.soon.map(x => '<div style="padding:4px 0;border-bottom:1px solid var(--line)">⚠ <b>' + esc(x.name) + '</b> – ' + esc(x.doc) + (x.no ? ' <span class="hint">' + esc(x.no) + '</span>' : '') + ' · ' + esc(niceDY(x.exp)) + ' · ' + tag(x) + '</div>').join('');
   $('prL').innerHTML = ['Worker', 'Management'].map(g => '<div style="margin-top:8px"><b>' + (g === 'Worker' ? '👷 Workers' : '🧑‍💼 Management') + '</b></div>' +
     r.people.filter(p => p.group === g).map(p => '<div class="row" style="padding:5px 0;border-bottom:1px solid var(--line);align-items:center"><span style="flex:1">' + (p.photo ? '🖼 ' : '') + esc(p.name) +
-      ' <span class="hint">' + (p.join ? 'joined ' + esc(niceDY(p.join)) : 'joining date –') + ' · documents ' + p.filled + '/3</span></span><button class="grey sm" onclick="prOpen(\'' + esc(p.name).replace(/'/g, "\\'") + '\')">👤 Profile</button></div>').join('')).join('');
+      ' <span class="hint">' + (p.join ? 'joined ' + esc(niceDY(p.join)) : 'joining date –') + ' · documents ' + p.filled + '/4</span></span><button class="grey sm" onclick="prOpen(\'' + esc(p.name).replace(/'/g, "\\'") + '\')">👤 Profile</button></div>').join('')).join('');
 }
 const prF = (id, lbl, v, type) => '<label style="display:block;margin-top:6px">' + lbl + '<input id="' + id + '" type="' + (type || 'text') + '" value="' + esc(v || '') + '" style="width:100%"></label>';
 function prOpen(name){
@@ -1382,25 +1382,58 @@ function prOpen(name){
       html: '<div style="text-align:center;margin:6px 0">' + (d.photoData ? '<img src="' + d.photoData + '" style="max-width:140px;max-height:160px;border-radius:8px">' : '<div class="hint">No photo</div>') +
           '<br><label class="grey" style="display:inline-block;margin-top:6px;padding:8px 12px;border-radius:8px;background:#6B7280;color:#fff;cursor:pointer">📷 ' + (d.photoData ? 'Change photo' : 'Add photo') + '<input type="file" accept="image/*" style="display:none" onchange="prPhoto(this)"></label></div>' +
         prF('pfJoin', 'Joining date', d.join, 'date') + prF('pfEmail', 'Email', d.email, 'email') + prF('pfMob', 'Mobile (UAE)', d.mobile, 'tel') + prF('pfHome', 'Home country contact (name / phone)', d.home) +
-        '<div class="row">' + '<span style="flex:1">' + prF('pfPpNo', 'Passport No.', d.ppNo) + '</span><span style="flex:1">' + prF('pfPpExp', 'Passport expiry', d.ppExp, 'date') + '</span></div>' +
-        '<div class="row">' + '<span style="flex:1">' + prF('pfEidNo', 'Emirates ID No.', d.eidNo) + '</span><span style="flex:1">' + prF('pfEidExp', 'Emirates ID expiry', d.eidExp, 'date') + '</span></div>' +
-        '<div class="row">' + '<span style="flex:1">' + prF('pfInsNo', 'Insurance No.', d.insNo) + '</span><span style="flex:1">' + prF('pfInsExp', 'Insurance expiry', d.insExp, 'date') + '</span></div>' +
+        [['Passport', 'pfPpNo', 'pfPpExp', d.ppNo, d.ppExp], ['Emirates ID', 'pfEidNo', 'pfEidExp', d.eidNo, d.eidExp], ['Visa', 'pfVisaNo', 'pfVisaExp', d.visaNo, d.visaExp], ['Insurance', 'pfInsNo', 'pfInsExp', d.insNo, d.insExp]].map(x =>
+          '<div style="border-top:1px solid var(--line);margin-top:8px;padding-top:4px"><div class="row"><span style="flex:1">' + prF(x[1], x[0] + ' No.', x[3]) + '</span><span style="flex:1">' + prF(x[2], x[0] + ' expiry', x[4], 'date') + '</span></div>' + prUpBtn(x[0]) + '</div>').join('') +
         '<div style="margin-top:10px"><b>More details</b> <span class="hint">(e.g. labour card, visa – an expiry date gets reminders too)</span><div id="pfMore"></div>' +
         '<button class="grey sm" style="margin-top:6px" onclick="prMoreAdd()">➕ Add detail</button></div>' },
       () => {
         const g = id => $(id).value.trim();
         const more = [...document.querySelectorAll('#pfMore .pfm')].map(x => ({ label: x.querySelector('.l').value.trim(), no: x.querySelector('.n').value.trim(), exp: x.querySelector('.e').value }));
         if (more.some(m => !m.label && (m.no || m.exp))) { toast('Give each extra detail a name', false); return; }
-        call('profSave', [PIN, name, { join: $('pfJoin').value, email: g('pfEmail'), mobile: g('pfMob'), home: g('pfHome'), ppNo: g('pfPpNo'), ppExp: $('pfPpExp').value,
+        call('profSave', [PIN, name, { join: $('pfJoin').value, email: g('pfEmail'), mobile: g('pfMob'), home: g('pfHome'), ppNo: g('pfPpNo'), ppExp: $('pfPpExp').value, visaNo: g('pfVisaNo'), visaExp: $('pfVisaExp').value,
           eidNo: g('pfEidNo'), eidExp: $('pfEidExp').value, insNo: g('pfInsNo'), insExp: $('pfInsExp').value, more: more.filter(m => m.label) }], () => { toast(name + ': details saved', true); prLoad(); });
       });
     (d.more || []).forEach(m => prMoreAdd(m));
   });
 }
+/* ---- 📎 document copies (photo or PDF) per document – saved to Drive at once, opened inside the app ---- */
+const docKey = s => String(s || '').replace(/\W+/g, '_');
+const prFilesHtml = doc => { const l = ((window._pd || {}).files || []).filter(f => f.doc === doc);
+  return l.map(f => '<div class="hint" style="margin:2px 0">📄 ' + esc(f.name) + ' · ' + esc(niceDY(f.at)) + ' <a href="#" onclick="prDocOpen(\'' + f.id + '\');return false">Open</a> · <a href="#" style="color:#C62828" onclick="prDocDel(\'' + f.id + '\');return false">Remove</a></div>').join(''); };
+const prUpBtn = doc => '<label class="grey sm" style="display:inline-block;margin-top:4px;padding:5px 10px;border-radius:8px;background:#6B7280;color:#fff;cursor:pointer;font-size:13px">📎 Upload copy<input type="file" accept="image/*,application/pdf" style="display:none" onchange="prDocUp(this,' + "'" + esc(doc).replace(/'/g, '') + "'" + ')"></label><div id="pfF_' + docKey(doc) + '" data-label="' + esc(doc) + '">' + prFilesHtml(doc) + '</div>';
+function prFilesRedraw(){ document.querySelectorAll('[id^="pfF_"]').forEach(el => { el.innerHTML = prFilesHtml(el.dataset.label || ''); }); }
+function prDocUp(inp, doc){
+  if (!doc) { const l = inp.closest('.pfm') && inp.closest('.pfm').querySelector('.l'); doc = l ? l.value.trim() : ''; }
+  if (!doc) { toast('Write the detail name first', false); inp.value = ''; return; }
+  const f = inp.files && inp.files[0]; if (!f) return;
+  const name = window._pd.name, send = (data) => call('profDoc', [PIN, name, doc, data, f.name], d => { window._pd = Object.assign(window._pd, { files: d.files }); prFilesRedraw(); toast(doc + ' copy saved', true); });
+  if (f.type === 'application/pdf') {
+    if (f.size > 8e6) { toast('PDF too large (max 8 MB)', false); return; }
+    const rd = new FileReader(); rd.onload = () => send(rd.result); rd.readAsDataURL(f); return;
+  }
+  const img = new Image(), url = URL.createObjectURL(f);
+  img.onload = () => { URL.revokeObjectURL(url); const c = document.createElement('canvas'), sc = Math.min(1, 1600 / Math.max(img.width, img.height));
+    c.width = Math.round(img.width * sc); c.height = Math.round(img.height * sc); c.getContext('2d').drawImage(img, 0, 0, c.width, c.height); send(c.toDataURL('image/jpeg', 0.8)); };
+  img.onerror = () => toast('Could not read the file', false); img.src = url;
+}
+function prDocOpen(id){
+  call('profDocGet', [PIN, window._pd.name, id], r => {
+    const b = atob(r.data.split(',')[1]), u8 = new Uint8Array(b.length); for (let i = 0; i < b.length; i++) u8[i] = b.charCodeAt(i);
+    const url = URL.createObjectURL(new Blob([u8], { type: r.type })), ov = document.createElement('div');
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:9999;display:flex;flex-direction:column;padding:10px';
+    ov.innerHTML = '<div class="row" style="margin-bottom:6px"><a href="' + url + '" download style="color:#fff;flex:1">⬇ Download</a><button class="grey" onclick="this.closest(\'div[style]\').parentNode.remove()">✕ Close</button></div>' +
+      (/pdf/.test(r.type) ? '<iframe src="' + url + '" style="flex:1;background:#fff;border:0"></iframe>' : '<div style="flex:1;overflow:auto;text-align:center"><img src="' + url + '" style="max-width:100%"></div>');
+    document.body.appendChild(ov);
+  });
+}
+function prDocDel(id){ ask({ title: 'Remove this copy?', yes: 'Remove', warn: true, en: 'The file goes to the Drive bin (it can be restored for 30 days).' },
+  () => call('profDocDel', [PIN, window._pd.name, id], d => { window._pd = Object.assign(window._pd, { files: d.files }); prOpen(window._pd.name); toast('Removed', true); }), () => prOpen(window._pd.name)); }
 function prMoreAdd(m){
   m = m || {}; const el = document.createElement('div'); el.className = 'pfm'; el.style.cssText = 'border-top:1px solid var(--line);padding-top:6px;margin-top:6px';
   el.innerHTML = '<div class="row"><input class="l" placeholder="Detail name (e.g. Visa)" value="' + esc(m.label || '') + '" style="flex:1"><button class="grey sm" onclick="this.closest(\'.pfm\').remove()">✕</button></div>' +
-    '<div class="row" style="margin-top:4px"><input class="n" placeholder="Number" value="' + esc(m.no || '') + '" style="flex:1"><input class="e" type="date" value="' + esc(m.exp || '') + '" style="flex:1" title="Expiry (optional)"></div>';
+    '<div class="row" style="margin-top:4px"><input class="n" placeholder="Number" value="' + esc(m.no || '') + '" style="flex:1"><input class="e" type="date" value="' + esc(m.exp || '') + '" style="flex:1" title="Expiry (optional)"></div>' +
+    '<label class="grey sm" style="display:inline-block;margin-top:4px;padding:5px 10px;border-radius:8px;background:#6B7280;color:#fff;cursor:pointer;font-size:13px">📎 Upload copy<input type="file" accept="image/*,application/pdf" style="display:none" onchange="prDocUp(this,\'' + esc(m.label || '').replace(/'/g, '') + '\')"></label>' +
+    (m.label ? '<div id="pfF_' + docKey(m.label) + '" data-label="' + esc(m.label) + '">' + prFilesHtml(m.label) + '</div>' : '<div class="hint">Save the detail name first, then upload</div>');
   $('pfMore').appendChild(el);
 }
 function prPhoto(inp){

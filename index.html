@@ -17,6 +17,7 @@
   header{background:var(--blue);color:#fff;padding:14px 16px;position:relative}
   #bell{position:absolute;top:54px;right:12px;background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.5);border-radius:8px;padding:6px 12px;font-size:16px}
   .nt{padding:8px 4px;border-bottom:1px solid var(--line);font-size:14px;cursor:pointer} .nt.u{background:#EFF6FF;font-weight:bold} .nt .hint{margin:2px 0 0;font-weight:normal}
+  .nt .t1{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .wbig{background:#fff;border-radius:14px;padding:16px;box-shadow:0 4px 14px rgba(0,0,0,.08);margin-bottom:12px}
   .wbig .v{font-size:32px;font-weight:800;color:var(--blue)} .wbar{height:8px;background:#E5EDF5;border-radius:6px;margin-top:8px;overflow:hidden} .wbar i{display:block;height:100%;background:linear-gradient(90deg,#2E7D32,#66BB6A)}
   .wtiles{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px} .wt{background:#fff;border:1px solid var(--line);border-radius:12px;padding:10px 4px;text-align:center} .wt b{display:block;font-size:20px} .wt span{font-size:11px;color:var(--muted)}
@@ -581,6 +582,7 @@ function tkDraw(ts, today, admin){
         '<div class="hint">' + (t.priv ? '🔒 <b>Private</b> · ' : admin ? 'To <b>' + esc(tkWho(t.to)) + '</b> · ' : '') + niceD(t.start) + ' → due ' + niceD(t.due) + (o ? ' · <b style="color:#C62828">OVERDUE</b>' : '') +
           (t.remAt && !fin ? ' · ⏰ ' + esc(niceD(t.remAt.slice(0, 10)) + ' ' + t.remAt.slice(11)) + (t.rep && t.rep !== 'Once' ? ' (' + (t.rep === 'Daily' ? 'every day' : 'every week') + ')' : '') : '') + '</div>' +
         (t.details ? '<div style="margin-top:4px;white-space:pre-wrap">' + esc(t.details) + '</div>' : '') +
+        tkAckLine(t, k, admin, fin) +
         (t.updates.length ? '<div class="up">' + t.updates.map(esc).join('\n') + '</div>' : '') +
         (t.status === 'Cancelled' ? '' : '<div class="row" style="margin-top:6px"><select id="tkS' + k + '">' + Object.keys(TST).filter(s => s !== 'Cancelled').map(s => '<option' + (s === t.status ? ' selected' : '') + '>' + s + '</option>').join('') + '</select>' +
           '<input id="tkR' + k + '" placeholder="Reply / update" maxlength="800" style="flex:1;min-width:140px"><button class="pri sm" onclick="tkUpd(' + k + ')">Send</button>' +
@@ -713,7 +715,7 @@ function hrInc(){
 }
 function tkRes(r){ if (r.admin) tkAdmin(r); else { window._d.tasks = r.tasks; tkDraw(r.tasks, r.today, false); } }
 function tkAdmin(r){
-  window._sups = r.sups; window._tkAdm = true; TG_ON = !!r.tg;
+  window._sups = r.sups; window._tkAdm = true; TG_ON = !!r.tg; window._tkMe = r.me;
   if (!$('tkTo').dataset.done) { const bx = (n, l) => '<label style="display:inline-block;margin-right:12px"><input type="checkbox" class="tkTo" value="' + esc(n) + '"> ' + esc(l) + '</label>';
     $('tkTo').innerHTML = '<div class="hint" style="margin:4px 0 0">Supervisors</div>' + r.sups.map(n => bx(n, n)).join('') + '<div class="hint" style="margin:4px 0 0">Admins</div>' + (r.adms || []).map(n => bx(n, tkWho(n))).join(''); $('tkTo').dataset.done = 1; }
   if (!$('tkStart').value) { $('tkStart').value = r.today; $('tkDue').value = r.today; }
@@ -730,6 +732,15 @@ function tkAdd(){
   call('addTask', [PIN, t], r => { toast(t.priv ? 'Private task saved' : 'Task given to ' + t.to.map(tkWho).join(', '), true); $('tkTitle').value = ''; $('tkDet').value = ''; $('tkRem').value = ''; $('tkRep').value = 'Once'; $('tkPriv').checked = false; $('tkToBox').style.display = '';
     document.querySelectorAll('.tkTo').forEach(c => c.checked = false); tkAdmin(r); });
 }
+/** ✅ Acknowledged (calendar Yes / email link / app button) – shown on every task card. */
+function tkAckLine(t, k, admin, fin){
+  if (t.priv || t.to === t.by) return '';
+  const mine = !admin || t.to === window._tkMe, ok = /^Acknowledged/.test(t.ack);
+  const st = ok ? '<span style="color:#2E7D32">✅ ' + esc(t.ack) + '</span>' : /^Declined/.test(t.ack) ? '<b style="color:#C62828">❌ ' + esc(t.ack) + '</b>' :
+    t.ack ? '<span class="hint">✉ ' + esc(t.ack) + '</span>' : '<b style="color:#B26A00">⏳ Not acknowledged yet</b>';
+  return '<div style="margin-top:4px;font-size:14px">' + st + (mine && !ok && !fin ? ' <button class="pri sm" onclick="tkAck(' + k + ')">✅ Acknowledge</button>' : '') + '</div>';
+}
+function tkAck(k){ call('taskAck', [PIN, window._tk[k].id], r => { toast('Acknowledged – ' + (r.admin ? 'the giver is told' : 'admin is told'), true); tkRes(r); }); }
 function tkUpd(k){
   const t = window._tk[k], st = $('tkS' + k).value, rp = $('tkR' + k).value.trim();
   if (st === t.status && !rp) { toast('Change the status or write a reply', false); return; }
@@ -1474,7 +1485,7 @@ function prDraw(){
     r.soon.map(x => '<div style="padding:4px 0;border-bottom:1px solid var(--line)">⚠ <b>' + esc(x.name) + '</b> – ' + esc(x.doc) + (x.no ? ' <span class="hint">' + esc(x.no) + '</span>' : '') + ' · ' + esc(niceDY(x.exp)) + ' · ' + tag(x) + '</div>').join('');
   $('prL').innerHTML = ['Worker', 'Management'].map(g => '<div style="margin-top:8px"><b>' + (g === 'Worker' ? '👷 Workers' : '🧑‍💼 Management') + '</b></div>' +
     r.people.filter(p => p.group === g).map(p => '<div class="row" style="padding:5px 0;border-bottom:1px solid var(--line);align-items:center"><span style="flex:1">' + (p.photo ? '🖼 ' : '') + esc(p.name) +
-      ' <span class="hint">' + (p.join ? 'joined ' + esc(niceDY(p.join)) : 'joining date –') + ' · documents ' + p.filled + '/4</span></span><button class="grey sm" onclick="prOpen(\'' + esc(p.name).replace(/'/g, "\\'") + '\')">👤 Profile</button></div>').join('')).join('');
+      ' <span class="hint">' + (p.join ? 'joined ' + esc(niceDY(p.join)) : 'joining date –') + ' · documents ' + p.filled + '/4 · ' + (p.email ? '✉' : '<b class="due">no email</b>') + '</span></span><button class="grey sm" onclick="prOpen(\'' + esc(p.name).replace(/'/g, "\\'") + '\')">👤 Profile</button></div>').join('')).join('');
 }
 const prF = (id, lbl, v, type) => '<label style="display:block;margin-top:6px">' + lbl + '<input id="' + id + '" type="' + (type || 'text') + '" value="' + esc(v || '') + '" style="width:100%"></label>';
 function prOpen(name){
@@ -1578,17 +1589,32 @@ function ntPoll(){
   NT_T = setTimeout(ntPoll, 180000);
 }
 document.addEventListener('visibilitychange', () => { if (!document.hidden && /^T:/.test(PIN)) ntPoll(); });
+/* Bell (Haroon 15 Nov): one short line per notice, tap = full text; last 5 days only, older ones on request. */
+const ntLine = (x, k, old) => '<div class="nt' + (x.unread ? ' u' : '') + '" onclick="ntShow(' + k + ',' + (old ? 1 : 0) + ')"><div class="t1">' + esc(x.text) + '</div><div class="hint">' + esc(x.when) + ' · tap to read</div></div>';
 function ntOpen(){
   call('notifications', [PIN], r => {
     window._nt = r;
     const go = p => '<div class="nt" onclick="ntGo(\'' + esc(p.page || '') + '\')">';
-    ask({ title: '🔔 Notifications', noYes: true, en: r.todo.length || r.items.length ? '' : 'Nothing new.',
+    ask({ title: '🔔 Notifications', noYes: true, en: r.todo.length || r.items.length ? '' : 'Nothing new in the last 5 days.',
           html: (r.todo.length ? '<div style="font-weight:bold;margin:4px 0">Needs attention</div>' + r.todo.map(t => go(t) + '⚠ ' + esc(t.text) + '</div>').join('') : '') +
-                (r.items.length ? '<div style="font-weight:bold;margin:12px 0 4px">Last 14 days</div>' + r.items.map(x => go(x).replace('class="nt"', 'class="nt' + (x.unread ? ' u' : '') + '"') + esc(x.text) + '<div class="hint">' + esc(x.when) + '</div></div>').join('') : '') +
-                '<div style="max-height:0"></div>' });
+                (r.items.length ? '<div style="font-weight:bold;margin:12px 0 4px">Last 5 days</div>' + r.items.map((x, k) => ntLine(x, k)).join('') : '') +
+                '<button class="grey" style="width:100%;margin-top:10px" onclick="ntOld()">📜 Older notifications</button>' });
     $('ntN').textContent = r.todo.reduce((a, t) => a + t.n, 0) || '';
     call('notifSeen', [PIN], () => {}, () => {});
   });
+}
+function ntShow(k, old){
+  const x = (old ? window._ntOld : window._nt.items)[k], wk = window._role === 'WORKER';
+  ask({ title: '🔔 ' + x.when, yes: x.page && !wk ? 'Open ➜' : 'Close', en: x.text,
+        html: (x.by && !wk ? '<div class="hint" style="margin-top:6px">From: ' + esc(String(x.by).replace(/^Admin \((.*)\)$/, '$1')) + '</div>' : '') +
+              '<button class="grey" style="width:100%;margin-top:8px" onclick="' + (old ? 'ntOldDraw()' : 'ntOpen()') + '">⬅ Back to the list</button>' },
+    () => { if (x.page && !wk) ntGo(x.page); });
+}
+function ntOld(){ call('notifOld', [PIN], l => { window._ntOld = l; ntOldDraw(); }); }
+function ntOldDraw(){
+  const l = window._ntOld || [];
+  ask({ title: '📜 Older notifications', noYes: true, en: l.length ? 'From 5 to 60 days ago.' : 'No older notifications (5 to 60 days ago).',
+        html: l.map((x, k) => ntLine(x, k, true)).join('') + '<button class="grey" style="width:100%;margin-top:10px" onclick="ntOpen()">⬅ Last 5 days</button>' });
 }
 function ntGo(p){
   $('modal').style.display = 'none';

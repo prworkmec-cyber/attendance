@@ -151,7 +151,7 @@ button.wait{opacity:.5;filter:grayscale(1);cursor:progress;pointer-events:none}
 
   <div id="adm" class="hidden">
     <div class="tabs" id="tabs">
-      <button data-p="live" onclick="pg('live')">👷 Live</button><button data-p="appr" onclick="pg('appr')">🔔 Approvals<span id="apBadge" class="apb"></span></button><button data-p="task" onclick="pg('task')">📋 Tasks</button><button data-p="hr" onclick="pg('hr')">💼 HR</button><button data-p="att" onclick="pg('att')">Attendance</button><button data-p="staff" onclick="pg('staff')">Staff</button><button data-p="money" onclick="pg('money')">💵 Advances &amp; Loans</button><button data-p="ls" onclick="pg('ls')">✈ Vacations</button><button data-p="set" onclick="pg('set')">Settings</button>
+      <button data-p="live" onclick="pg('live')">👷 Live</button><button data-p="appr" onclick="pg('appr')">🔔 Approvals<span id="apBadge" class="apb"></span></button><button data-p="task" onclick="pg('task')">📋 Tasks</button><button data-p="hr" onclick="pg('hr')">💼 HR</button><button data-p="att" onclick="pg('att')">Attendance</button><button data-p="staff" onclick="pg('staff')">Staff</button><button data-p="money" onclick="pg('money')">💵 Advances &amp; Loans</button><button data-p="ls" onclick="pg('ls')">✈ Vacations</button><button data-p="co" onclick="pg('co')">🏢 Company</button><button data-p="set" onclick="pg('set')">Settings</button>
     </div>
     <div class="card" data-pg="live">
       <div class="row"><b style="flex:1">👷 Who is at work now</b><span class="hint" id="lvT"></span><button class="grey sm" onclick="liveLoad()">⟳ Refresh</button></div>
@@ -301,6 +301,16 @@ button.wait{opacity:.5;filter:grayscale(1);cursor:progress;pointer-events:none}
       <b>📝 Leave requests from workers</b>
       <div class="hint">Requested ahead in the worker app. The supervisor confirms first; you decide paid, unpaid or refuse. Approved leave is booked ahead – on those days the worker shows as on leave.</div>
       <div id="lrL" style="margin-top:8px">Loading…</div>
+    </div>
+    <div class="card" data-pg="co">
+      <div class="row"><b style="flex:1">⚠ Company documents expiring (30 days)</b><button class="grey sm" onclick="coLoad()">⟳</button></div>
+      <div id="coSoon" style="margin-top:6px">Loading…</div>
+    </div>
+    <div class="card" data-pg="co">
+      <b>🏢 Company documents</b>
+      <div class="hint">Trade licence, establishment card, tenancy, insurance, permits … Expiry dates are emailed to management 30 and 15 days before. Copies are kept in Drive (Company Documents).</div>
+      <div id="coL" style="margin-top:6px">Loading…</div>
+      <button class="pri" style="width:100%;margin-top:10px" onclick="coEdit()">➕ Add company document</button>
     </div>
     <div class="card" data-pg="set" id="lgCard">
       <div class="row"><b style="flex:1">🔑 Logins &amp; PINs</b><button class="grey sm" onclick="lgLoad()">⟳</button></div>
@@ -1197,7 +1207,7 @@ function sigClear(){ const c = $('sigPad'), x = c.getContext('2d'); x.fillStyle 
   ['pointerup', 'pointercancel'].forEach(t => c.addEventListener(t, () => { down = false; }));
 })();
 /* ---- admin pages ---- */
-const TABNM = { live: '👷 Live', appr: '🔔 Approvals', task: '📋 Tasks', hr: '💼 HR', att: 'Attendance', staff: 'Staff', money: '💵 Advances & Loans', ls: '✈ Vacations', set: 'Settings' };
+const TABNM = { live: '👷 Live', appr: '🔔 Approvals', task: '📋 Tasks', hr: '💼 HR', att: 'Attendance', staff: 'Staff', money: '💵 Advances & Loans', ls: '✈ Vacations', co: '🏢 Company', set: 'Settings' };
 const TAB_ALL = Object.keys(TABNM);
 const tabOk = p => (window._tabs || TAB_ALL).indexOf(p) >= 0;
 function admTabs(t){   // only the pages Haroon allowed for this admin
@@ -1215,6 +1225,7 @@ function pg(p){
   if (p === 'ls') { lsrLoad(); vacLoad(); }
   if (p === 'set') { lgLoad(); wpDraw(); }
   if (p === 'staff') prLoad();
+  if (p === 'co') coLoad();
   if (p === 'appr') apLoad();
   if (p === 'att') attShow();
   if (p === 'task') tkLoad();
@@ -1646,6 +1657,38 @@ function dqDec(k, ok){
   if (ok) { call('docReqDecide', [PIN, x.id, true, ''], l => { dqDraw(l); toast(x.name + ': ' + x.doc + ' saved to his profile', true); }); return; }
   ask({ title: 'Send back – ' + x.name, names: [x.name], yes: 'Send back', txt: 'Why? (he will see this)', txtReq: true, en: x.doc + ' is not saved. He can send it again.' },
     f => call('docReqDecide', [PIN, x.id, false, f.txt], l => { dqDraw(l); toast('Sent back', true); }));
+}
+/* ---- 🏢 Company documents ---- */
+function coLoad(){ call('coList', [PIN], coDraw); }
+function coDraw(l){
+  window._co = l;
+  const tag = d => d === '' ? '<span class="hint">no expiry</span>' : d < 0 ? '<b class="due">EXPIRED ' + (-d) + ' d ago</b>' : d <= 15 ? '<b class="due">' + d + ' days left</b>' : d <= 30 ? '<b style="color:#B26A00">' + d + ' days left</b>' : '<span style="color:#2E7D32">' + d + ' days left</span>';
+  const soon = l.filter(x => x.days !== '' && x.days <= 30);
+  $('coSoon').innerHTML = !soon.length ? '<div class="hint">Nothing expires in the next 30 days 👍</div>' : soon.map(x => '<div>⚠ <b>' + esc(x.doc) + '</b> · ' + esc(niceDY(x.exp)) + ' · ' + tag(x.days) + '</div>').join('');
+  $('coL').innerHTML = !l.length ? '<div class="hint">No company document yet – add the first one below.</div>' : l.map((x, k) => '<div style="padding:8px 0;border-bottom:1px solid var(--line)"><div class="row" style="align-items:center"><span style="flex:1"><b>' + esc(x.doc) + '</b>' +
+    (x.no ? ' <span class="hint">' + esc(x.no) + '</span>' : '') + '<br><span class="hint">' + (x.issue ? 'issued ' + esc(niceDY(x.issue)) + ' · ' : '') + (x.exp ? 'expires ' + esc(niceDY(x.exp)) + ' · ' : '') + '</span>' + tag(x.days) + '</span><button class="grey sm" onclick="coEdit(' + k + ')">✎ Edit</button></div>' +
+    (x.notes ? '<div class="hint">📝 ' + esc(x.notes) + '</div>' : '') +
+    x.files.map(f => '<div class="hint">📄 ' + esc(f.name) + ' · ' + esc(niceDY(f.at)) + ' <a href="#" onclick="call(\'coFileGet\', [PIN, \'' + x.id + '\', \'' + f.id + '\'], fileShow);return false">Open</a> · <a href="#" style="color:#C62828" onclick="coFileDel(\'' + x.id + '\',\'' + f.id + '\');return false">Remove</a></div>').join('') +
+    '<label class="grey sm" style="display:inline-block;margin-top:4px;padding:5px 10px;border-radius:8px;background:#6B7280;color:#fff;cursor:pointer;font-size:13px">📎 Upload copy<input type="file" accept="image/*,application/pdf" style="display:none" onchange="coUp(this,\'' + x.id + '\')"></label></div>').join('');
+}
+function coEdit(k){
+  const x = k === undefined ? {} : window._co[k];
+  ask({ title: x.id ? '✎ ' + x.doc : '➕ New company document', yes: 'Save', en: 'An expiry date is emailed to management 30 and 15 days before.' + (x.id ? '' : '\nCopies can be uploaded after saving.'),
+    html: prF('coD', 'Document (e.g. Trade licence)', x.doc) + prF('coN', 'Number', x.no) + '<div class="row"><span style="flex:1">' + prF('coI', 'Issue date', x.issue, 'date') + '</span><span style="flex:1">' + prF('coE', 'Expiry date', x.exp, 'date') + '</span></div>' + prF('coT', 'Notes', x.notes) +
+      (x.id ? '<button class="out sm" style="margin-top:10px" onclick="coDelGo(\'' + x.id + '\')">🗑 Remove this document</button>' : '') },
+    () => { if (!$('coD').value.trim()) { toast('Write the document name', false); return; }
+      call('coSave', [PIN, x.id || '', { doc: $('coD').value, no: $('coN').value, issue: $('coI').value, exp: $('coE').value, notes: $('coT').value }], l => { coDraw(l); toast('Saved', true); }); });
+}
+function coDelGo(id){ ask({ title: 'Remove this document?', yes: 'Remove', warn: true, en: 'It is hidden from the list (kept in the COMPANY_DOCS tab marked Removed).' }, () => call('coDel', [PIN, id], l => { coDraw(l); toast('Removed', true); })); }
+function coFileDel(id, fid){ ask({ title: 'Remove this copy?', yes: 'Remove', warn: true, en: 'The file goes to the Drive bin (it can be restored for 30 days).' }, () => call('coFileDel', [PIN, id, fid], l => { coDraw(l); toast('Removed', true); })); }
+function coUp(inp, id){
+  const f = inp.files && inp.files[0]; if (!f) return;
+  const go = data => call('coFile', [PIN, id, data, f.name], l => { coDraw(l); toast('Copy saved', true); });
+  if (f.type === 'application/pdf') { if (f.size > 8e6) { toast('PDF too large (max 8 MB)', false); return; } const rd = new FileReader(); rd.onload = () => go(rd.result); rd.readAsDataURL(f); return; }
+  const img = new Image(), url = URL.createObjectURL(f);
+  img.onload = () => { URL.revokeObjectURL(url); const c = document.createElement('canvas'), sc = Math.min(1, 1600 / Math.max(img.width, img.height));
+    c.width = Math.round(img.width * sc); c.height = Math.round(img.height * sc); c.getContext('2d').drawImage(img, 0, 0, c.width, c.height); go(c.toDataURL('image/jpeg', 0.8)); };
+  img.onerror = () => toast('Could not read the file', false); img.src = url;
 }
 function apLoad(){ call('listApprovals', [PIN], apDraw); lrLoad(); dqLoad(); }
 function apDraw(res){

@@ -3,13 +3,13 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>WORKMEC Attendance</title>
+<title>WORKMEC</title>
 <meta name="theme-color" content="#1F4E78">
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="Attendance">
+<meta name="apple-mobile-web-app-title" content="WORKMEC">
 <style>
   :root{--blue:#1F4E78;--bg:#F4F6F9;--card:#fff;--line:#E1E5EB;--green:#2E7D32;--red:#C62828;--amber:#B26A00;--muted:#6B7280}
   *{box-sizing:border-box}
@@ -475,7 +475,7 @@ function doLogin(auto){
   if (!auto) PIN = $('pin').value.trim();
   call('login', [PIN], r => {
     TOK = r.tok; PIN = 'T:' + r.tok; $('pin').value = ''; LAST = Date.now(); sesSave(); $('lo').classList.remove('hidden');
-    window._main = !!r.main; window._role = r.role; $('myd').classList.remove('hidden'); if (r.bell === false) $('bell').classList.add('hidden'); else { $('bell').classList.remove('hidden'); ntPoll(); } if (r.role === 'SUP') setTimeout(() => { qBar(); qSync(); }, 500);
+    window._main = !!r.main; window._role = r.role; $('myd').classList.remove('hidden'); if (r.bell === false) $('bell').classList.add('hidden'); else { $('bell').classList.remove('hidden'); ntPoll(); pushAuto(); if (/[?&]bell=1/.test(location.search)) setTimeout(ntOpen, 1500); } if (r.role === 'SUP') setTimeout(() => { qBar(); qSync(); }, 500);
     $('login').classList.add('hidden');
     if (r.role === 'ADMIN') { $('adm').classList.remove('hidden'); $('hdr').textContent = r.name || 'Admin'; admTabs(r.tabs); mkFold(); loadStaff(); if (tabOk('appr')) apLoad(); pg('dash'); }
     else if (r.role === 'WORKER') { $('wrk').classList.remove('hidden'); $('hdr').textContent = 'Hello ' + r.name; wkLoad(); }
@@ -1598,11 +1598,49 @@ function ntOpen(){
     ask({ title: '🔔 Notifications', noYes: true, en: r.todo.length || r.items.length ? '' : 'Nothing new in the last 5 days.',
           html: (r.todo.length ? '<div style="font-weight:bold;margin:4px 0">Needs attention</div>' + r.todo.map(t => go(t) + '⚠ ' + esc(t.text) + '</div>').join('') : '') +
                 (r.items.length ? '<div style="font-weight:bold;margin:12px 0 4px">Last 5 days</div>' + r.items.map((x, k) => ntLine(x, k)).join('') : '') +
-                '<button class="grey" style="width:100%;margin-top:10px" onclick="ntOld()">📜 Older notifications</button>' });
+                '<button class="grey" style="width:100%;margin-top:10px" onclick="ntOld()">📜 Older notifications</button>' + pushBox() });
     $('ntN').textContent = r.todo.reduce((a, t) => a + t.n, 0) || '';
     call('notifSeen', [PIN], () => {}, () => {});
   });
 }
+/* ---- 📲 Phone / computer notifications (Web Push) – free, works on Android, Windows, Mac, iPhone/iPad (home-screen app) ---- */
+let PUSH_ON = false, INSTALL_EV = null;
+window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); INSTALL_EV = e; });
+if (navigator.serviceWorker) navigator.serviceWorker.addEventListener('message', e => { if (e.data === 'bell' && /^T:/.test(PIN)) ntOpen(); });
+const pushOk = () => 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+const isIOS = () => /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const isApp = () => window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+const callP = (fn, args) => new Promise((ok, no) => call(fn, args, ok, no, () => no('No internet')));
+function pushBox(){
+  let h = '<div style="border-top:1px solid var(--line);margin-top:12px;padding-top:8px"><b>📲 Notifications on this device</b><div class="hint" style="margin:4px 0">';
+  if (PUSH_ON) h += '<b style="color:#2E7D32">ON ✓</b> – notices also pop up on this ' + (isIOS() || /Android/.test(navigator.userAgent) ? 'phone' : 'computer') + ' when the app is closed.</div><button class="grey sm" onclick="pushTest()">Send a test</button>';
+  else if (pushOk() && Notification.permission === 'denied') h += 'Blocked for this app. Allow notifications for WORKMEC in the phone / browser settings, then come back.</div>';
+  else if (pushOk()) h += 'Get every notice as a phone / computer notification, even when the app is closed.</div><button class="pri" style="width:100%" onclick="pushOn()">🔔 Turn on notifications</button>';
+  else if (isIOS() && !isApp()) h += 'iPhone / iPad: tap Share <b>⬆</b> → <b>Add to Home Screen</b>, open <b>WORKMEC</b> from the new icon, log in, then turn notifications on here.</div>';
+  else h += 'This browser cannot show notifications – use Chrome, Edge or Safari.</div>';
+  if (INSTALL_EV && !isApp()) h += '<button class="grey" style="width:100%;margin-top:6px" onclick="pushInstall()">⬇ Install WORKMEC as an app</button>';
+  return h + '</div>';
+}
+async function pushInstall(){ if (!INSTALL_EV) return; INSTALL_EV.prompt(); try { await INSTALL_EV.userChoice; } catch (e) {} INSTALL_EV = null; }
+const b64key = s => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((s.length + 3) % 4)), c => c.charCodeAt(0));
+/** Register this device for the person logged in (asks the phone for permission the first time). */
+async function pushOn(ask){
+  try {
+    if (!pushOk()) return;
+    if (ask !== false && Notification.permission !== 'granted' && await Notification.requestPermission() !== 'granted') { toast('Notifications were not allowed', false); return; }
+    if (Notification.permission !== 'granted') return;
+    const reg = await navigator.serviceWorker.ready;
+    let sub = await reg.pushManager.getSubscription();
+    if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64key(await callP('pushKey', [PIN])) });
+    const r = await callP('pushSub', [PIN, sub.toJSON(), DEV]);
+    await (await caches.open('wm-push')).put('id', new Response(JSON.stringify({ sid: r.sid, key: r.key, api: API })));
+    PUSH_ON = true;
+    if (ask !== false) { toast('Notifications are ON for this device', true); if ($('modal').style.display === 'flex') ntOpen(); }
+  } catch (e) { if (ask !== false) toast('Could not turn on notifications: ' + (e && e.message || e), false); }
+}
+/** After every login: if this device already allowed notifications, link it to the person now logged in. */
+function pushAuto(){ if (pushOk() && Notification.permission === 'granted') pushOn(false); }
+function pushTest(){ call('pushTest', [PIN], () => toast('Test sent – it should pop up in a few seconds', true)); }
 function ntShow(k, old){
   const x = (old ? window._ntOld : window._nt.items)[k], wk = window._role === 'WORKER';
   ask({ title: '🔔 ' + x.when, yes: x.page && !wk ? 'Open ➜' : 'Close', en: x.text,

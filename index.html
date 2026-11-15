@@ -49,6 +49,7 @@
   .chk{width:24px;height:24px;margin:0;flex:none}
   .chk:disabled{opacity:.3}
   .onleave{border-left:5px solid var(--amber);background:#FFFBEB}
+  .onvac{border-left:6px solid #E0A800;background:#FFF1A8}
   .due{color:#C62828;font-weight:bold}
   .bulkbar{position:fixed;left:0;right:0;bottom:0;z-index:40;background:#fff;border-top:1px solid var(--line);box-shadow:0 -4px 12px rgba(0,0,0,.08);padding:10px 16px calc(10px + env(safe-area-inset-bottom))}
   .bulkbar .selrow{display:flex;align-items:center;gap:8px;font-weight:bold;max-width:720px;margin:0 auto}
@@ -439,7 +440,7 @@ function doLogin(auto){
     TOK = r.tok; PIN = 'T:' + r.tok; $('pin').value = ''; LAST = Date.now(); sesSave(); $('lo').classList.remove('hidden');
     window._main = !!r.main; window._role = r.role; if (r.bell === false) $('bell').classList.add('hidden'); else { $('bell').classList.remove('hidden'); ntPoll(); } if (r.role === 'SUP') setTimeout(() => { qBar(); qSync(); }, 500);
     $('login').classList.add('hidden');
-    if (r.role === 'ADMIN') { $('adm').classList.remove('hidden'); $('hdr').textContent = r.name || 'Admin'; admTabs(r.tabs); loadStaff(); if (tabOk('appr')) apLoad(); let p = 'att'; try { p = localStorage.getItem('admPg') || 'att'; } catch (e) {} pg(p); }
+    if (r.role === 'ADMIN') { $('adm').classList.remove('hidden'); $('hdr').textContent = r.name || 'Admin'; admTabs(r.tabs); mkFold(); loadStaff(); if (tabOk('appr')) apLoad(); let p = 'att'; try { p = localStorage.getItem('admPg') || 'att'; } catch (e) {} pg(p); }
     else if (r.role === 'WORKER') { $('wrk').classList.remove('hidden'); $('hdr').textContent = 'Hello ' + r.name; wkLoad(); }
     else { $('sup').classList.remove('hidden'); if (r.roster) render(r.roster); else refresh(); getLoc(() => {}, true); }   // ask location permission early
   }, e => { PIN = ''; $('login').classList.remove('hidden'); $('hdr').textContent = 'Enter your password'; if (auto) { sesClear(); $('pin').value = ''; } toast(e, false); });
@@ -731,23 +732,26 @@ function render(d){
     const lvTxt = !lv ? '' : lv.left > 0 ? '<b>' + lv.left + ' day' + (lv.left === 1 ? '' : 's') + ' left</b> · back on duty ' + niceD(lv.ret)
        : lv.left === 0 ? '<span class="due">Due back today (' + niceD(lv.ret) + ')</span>'
                                         : '<span class="due">Return date passed (' + niceD(lv.ret) + ') – not back yet</span>';
+    const extTxt = lv && lv.plan ? ' · <b class="due">⚠ Extended / overstayed – planned back ' + niceD(lv.plan) + ' (extra days unpaid)</b>' : '';
     const lsTxt = lv && lv.ls ? ' · Leave salary: ' + (/^PAID/.test(lv.ls) ? '<b style="color:#2E7D32">' + esc(lv.ls) + '</b>' + (lv.by ? ' (received by ' + esc(lv.by) + (lv.signed ? ', signed ✍' : '') + ')' : '') : '<b class="due">' + esc(lv.ls) + '</b>') : '';
     const pl = w.planned, plTxt = !pl ? '' : '<b style="color:#B26A00">' + (pl.code === 'EL' ? 'Emergency leave' : '✈ Annual vacation') + ' from ' + esc(niceD(pl.from)) + ' – ' + pl.days + ' days</b>' + (pl.ls ? ' · Leave salary: ' + (/^PAID/.test(pl.ls) ? '<b style="color:#2E7D32">' + esc(pl.ls) + '</b>' + (pl.by ? ' (received by ' + esc(pl.by) + (pl.signed ? ', signed ✍' : '') + ')' : '') : '<b class="due">' + esc(pl.ls) + '</b>') : '');
     const payTxt = !w.inT && (absent || lv) ? '<b style="color:#2E7D32">✓ ' + esc(LEAVE[lv ? lv.code : w.status] || w.status) + ' saved</b>' +
       (w.pay === 'Pending' ? ' · <b style="color:#B26A00">⏳ waiting for admin approval</b>' : w.pay === 'Approved' ? ' · <b style="color:#2E7D32">approved (paid)</b>' : w.pay === 'Unpaid' ? ' · <b style="color:#C62828">unpaid</b>' : '') : '';
-    const times = (payTxt ? payTxt + ' · ' : '') + (plTxt ? plTxt + (lvTxt || w.inT || w.by ? ' · ' : '') : '') + (lvTxt ? lvTxt + lsTxt + (w.inT || w.by ? ' · ' : '') : '') + (w.adv ? '<b style="color:#C62828">Advance ' + esc(w.adv) + ' AED</b>' + (w.inT || w.by ? ' · ' : '') : '') + (w.inT ? 'In ' + esc(w.inT) : '') + (w.by ? (w.inT ? ' · ' : '') + 'by ' + esc(w.by) : '') + (w.outT ? ' · Out ' + esc(w.outT) + ' · OT ' + esc(w.ot) + 'h' : '') +
+    const times = (payTxt ? payTxt + ' · ' : '') + (plTxt ? plTxt + (lvTxt || w.inT || w.by ? ' · ' : '') : '') + (lvTxt ? lvTxt + extTxt + lsTxt + (w.inT || w.by ? ' · ' : '') : '') + (w.adv ? '<b style="color:#C62828">Advance ' + esc(w.adv) + ' AED</b>' + (w.inT || w.by ? ' · ' : '') : '') + (w.inT ? 'In ' + esc(w.inT) : '') + (w.by ? (w.inT ? ' · ' : '') + 'by ' + esc(w.by) : '') + (w.outT ? ' · Out ' + esc(w.outT) + ' · OT ' + esc(w.ot) + 'h' : '') +
                   (w.flags ? ' · <span class="flag">' + esc(w.flags) + '</span>' : '') +
                   (w.pen ? ' · <b style="color:#C62828">⏱ Penalty −' + esc(w.pen) + ' h</b> <a href="#" onclick="penDel(' + i + ');return false" style="color:#C62828">remove</a>' : '');
     const locked = !w.inT && (lv || absent);   // on leave today: no Check In, not ticked by Select all – change the dropdown to Present first
-    return '<div class="card' + (locked ? ' onleave' : '') + '"><div class="row">' +
+    const isVac = locked && lv && lv.code === 'AV';
+    return '<div class="card' + (locked ? ' onleave' : '') + (isVac ? ' onvac' : '') + '"><div class="row">' +
       '<input type="checkbox" class="chk" data-i="' + i + '" onchange="updBulk()"' + (locked ? ' disabled title="On leave – change to Present first"' : '') + '>' +
       '<div class="name">' + esc(w.name) + ' ' + badge + '</div>' +
       (locked ? '' : '<button class="in" ' + (w.inT ? 'disabled' : '') + ' onclick="act(\'checkIn\',' + i + ')">Check In</button>') +
       (locked || w.inT ? '' : '<button class="sick" onclick="sickW(' + i + ')">🤒 Sick</button>') +
       '<button class="out" ' + (!w.inT || w.outT ? 'disabled' : '') + ' onclick="act(\'checkOut\',' + i + ')">Check Out</button>' +
       '<select ' + (w.inT ? 'disabled' : '') + ' onchange="abs(' + i + ',this)">' +
-        '<option value="">' + (w.outT ? 'Checked out' : w.inT ? 'Active' : absent ? esc(LEAVE[w.status] || w.status) : lv ? esc(LEAVE[lv.code] || lv.code) : 'Present') + '</option>' + (locked ? '<option value="P">✓ Present – he came to work</option>' : '') + LEAVE_OPTS +
+        '<option value="">' + (w.outT ? 'Checked out' : w.inT ? 'Active' : absent ? esc(LEAVE[w.status] || w.status) : lv ? esc(LEAVE[lv.code] || lv.code) : 'Present') + '</option>' + (locked && !isVac ? '<option value="P">✓ Present – he came to work</option>' : '') + LEAVE_OPTS +
       '</select><button class="grey sm" onclick="adv(' + i + ')">+ Advance</button>' + (lv ? '' : '<button class="grey sm" id="lvb' + i + '" onclick="lvT(' + i + ')">▸ Leave</button>') + '<button class="grey sm" style="margin-left:auto" onclick="penW(' + i + ')">⏱ Penalty</button><button class="grey sm" onclick="noteW(' + i + ')">📝 Note</button><button class="warnb' + (w.warn >= 5 ? ' hot' : '') + '" style="margin-left:auto" title="Warnings this month – tap to give a warning" onclick="warnW(' + i + ')">⚠ ' + (w.warn || 0) + '</button></div>' +
+      (isVac ? '<div class="row" style="margin-top:6px"><button class="in" onclick="vacAllowW(' + i + ')">✅ Allow check-in</button><button class="grey" onclick="vacExtW(' + i + ')">➕ Extend vacation</button></div>' : '') +
       (window._pend || []).map((p, k) => p.name === w.name ? '<div class="certb">⏳ ' + esc(LEAVE[p.code]) + ' ' + niceD(p.from) + (p.days > 1 ? '–' + niceD(p.to) : '') + ' waiting for admin · <button class="grey sm" onclick="docAdd(window._pend[' + k + '])">📎 ' + (p.docs ? 'Add page (' + p.docs + ' saved)' : 'Upload supporting document') + '</button></div>' : '').join('') +
       (lv ? '' : '<div class="lvp" id="lvp' + i + '"><button class="grey" onclick="vac(' + i + ',\'AV\')">✈ Annual vacation</button><button class="grey" onclick="vac(' + i + ',\'EL\')">Emergency leave</button></div>') +
       (times || w.notes ? '<div class="times">' + times + (w.notes ? (times ? '<br>' : '') + '📝 ' + esc(w.notes) : '') + '</div>' : '') + '</div>';
@@ -756,6 +760,52 @@ function render(d){
   $('all').checked = false; updBulk();
 }
 
+/* ---- ✈ vacation card: Allow check-in / Extend vacation – one fixed reason must be ticked ---- */
+const VAC_WHY = [['BACK', '✅ Back from vacation (on time or early) – vacation ends today'], ['FLIGHT', '✈ Flight delayed – he is still working'], ['HOLD', '🏭 Held by company – he is still working'], ['OTHER', 'Other (write the reason)']];
+const EXT_WHY = [['REQ', 'Worker requested more days (unpaid)'], ['FLIGHT', 'Flight delayed on return'], ['COMPANY', 'Company approved'], ['OTHER', 'Other (write the reason)']];
+const whyHtml = (list, extra) => list.map(([k, t]) => '<label style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--line)"><input type="radio" name="vwhy" value="' + k + '" onchange="' + (extra || '') + '"> ' + esc(t) + '</label>').join('') +
+  '<input id="vwNote" placeholder="Note (needed for Other)" style="width:100%;margin-top:6px">';
+const whyGet = () => { const r = document.querySelector('input[name=vwhy]:checked'); return r ? r.value : ''; };
+function vacAllowW(i){
+  const w = window._list[i], tmr = new Date(new Date((window._date || dubaiNow().toISOString().slice(0, 10)) + 'T12:00:00Z').getTime() + 864e5).toISOString().slice(0, 10);
+  ask({ title: '✅ Allow check-in – ' + w.name, names: [w.name], yes: 'Save', en: w.name + ' is on annual vacation. Tick ONE reason:',
+        html: whyHtml(VAC_WHY, "$('vwFrom').style.display = /FLIGHT|HOLD|OTHER/.test(this.value) ? '' : 'none'") +
+          '<div id="vwFrom" style="display:none;margin-top:8px"><b>New first day of the vacation</b> <span class="hint">(same number of days, return moves too)</span><input id="vwFromIn" type="date" value="' + tmr + '" style="width:100%"></div>' },
+    () => {
+      const why = whyGet(); if (!why) { toast('Tick one reason', false); return; }
+      if (why === 'OTHER' && !$('vwNote').value.trim()) { toast('Write the reason for Other', false); return; }
+      call('vacAllow', [PIN, w.name, why, $('vwNote').value.trim(), why === 'BACK' ? '' : $('vwFromIn').value], d => { render(d); toast(w.name + ': check-in allowed – now press Check In', true); });
+    });
+}
+function vacExtW(i){
+  const w = window._list[i], lv = w.leave || {}, last = lv.ret ? new Date(new Date(lv.ret + 'T12:00:00Z').getTime() - 864e5).toISOString().slice(0, 10) : '';
+  ask({ title: '➕ Extend vacation – ' + w.name, names: [w.name], yes: 'Extend', en: 'Now his last vacation day is ' + (last ? niceD(last) : '–') + '. The extra days are unpaid. Tick ONE reason and pick the new last day:',
+        html: whyHtml(EXT_WHY) + '<div style="margin-top:8px"><b>New last day of the vacation</b><input id="vwLast" type="date" style="width:100%" value="' + last + '"></div>' },
+    () => {
+      const why = whyGet(); if (!why) { toast('Tick one reason', false); return; }
+      if (why === 'OTHER' && !$('vwNote').value.trim()) { toast('Write the reason for Other', false); return; }
+      if (!$('vwLast').value || $('vwLast').value <= last) { toast('Pick a last day after ' + niceD(last), false); return; }
+      call('vacExtend', [PIN, w.name, $('vwLast').value, why, $('vwNote').value.trim()], d => { render(d); toast(w.name + ': vacation extended to ' + niceD($('vwLast').value), true); });
+    });
+}
+/* ---- every titled card on the admin pages folds: the title is always visible as a button, tap to open ---- */
+function mkFold(){
+  const first = {};
+  document.querySelectorAll('#adm .card[data-pg]').forEach(c => {
+    const pgK = c.dataset.pg, isFirst = !first[pgK]; first[pgK] = 1;
+    if (c.dataset.fold || /^att(One|Bulk|Pen|Warn)$/.test(c.id)) return;
+    const h = c.firstElementChild; if (!h || !(h.tagName === 'B' || (h.classList.contains('row') && h.querySelector('b')))) return;
+    c.dataset.fold = '1';
+    const body = document.createElement('div'); while (h.nextSibling) body.appendChild(h.nextSibling); c.appendChild(body);
+    const ar = document.createElement('span'); ar.style.cssText = 'font-weight:bold;color:var(--blue);margin-right:4px'; h.insertBefore(ar, h.firstChild);
+    h.style.cursor = 'pointer';
+    const key = 'fold_' + pgK + '_' + (h.textContent || '').replace(/[^\w ]/g, '').trim().slice(0, 30);
+    const set = open => { body.style.display = open ? '' : 'none'; ar.textContent = open ? '▾' : '▸'; };
+    let st = null; try { st = localStorage.getItem(key); } catch (e) {}
+    set(st === null ? isFirst : st === '1');
+    h.addEventListener('click', e => { if (e.target.closest('select,button,input,a')) return; const o = body.style.display === 'none'; set(o); try { localStorage.setItem(key, o ? '1' : '0'); } catch (e2) {} });
+  });
+}
 const LEAVE = { SL: 'Sick Leave', EL: 'Emergency Leave', AV: 'Annual Vacation', WL: 'Warning Leave', PL: 'Personal Leave (unpaid)', L: 'Leave / Day off' };
 const LEAVE_UR = { SL: 'بیماری کی چھٹی', EL: 'ہنگامی چھٹی', AV: 'سالانہ چھٹی', WL: 'وارننگ چھٹی', PL: 'ذاتی چھٹی (بغیر تنخواہ)', L: 'چھٹی / آف' };
 const LONG = ['AV', 'EL', 'PL'];

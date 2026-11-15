@@ -212,7 +212,7 @@ button.wait{opacity:.5;filter:grayscale(1);cursor:progress;pointer-events:none}
     </div>
     <div class="card" data-pg="att" id="attWarn">
       <b>⚠ Warnings this month</b>
-      <div class="hint">Supervisors give warnings from the worker card. Every 6th warning in a month deducts 4 h from basic hours automatically. Removing a warning also takes back a 4 h deduction that is no longer due. The list starts fresh each month.</div>
+      <div class="hint">Supervisors give warnings from the worker card. Every 4th warning in a month deducts 4 h from basic hours automatically. Removing a warning also takes back a 4 h deduction that is no longer due. The list starts fresh each month.</div>
       <div class="row" style="margin-top:8px"><select id="wnWorker" style="flex:1" onchange="wnHint()"></select></div>
       <div id="wnCur" class="hint"></div>
       <input id="wnReason" placeholder="Reason (required)" style="width:100%;margin-top:6px">
@@ -491,7 +491,7 @@ function secDraw(d){
   window._ws = ws;
   $('wnS').innerHTML = (!ws.length ? '<div class="hint">No warnings this month.</div>' : ws.slice().reverse().map(w => '<div class="it"><b>' + esc(w.name) + '</b> · ' + niceD(w.ds) + ' · ' + esc(w.reason) +
       (w.signed ? ' · ✍ signed' : w.refused ? ' · <b style="color:#C62828">refused to sign</b>' : '') + ' <button class="grey sm" onclick="wlOpen(\'' + esc(w.id) + '\')">📄 Letter</button></div>').join('')) +
-    '<div class="hint" style="margin-top:6px">To give a warning, tap the ⚠ button on the worker\'s card. At 6 warnings in a month, 4 h are deducted.</div>';
+    '<div class="hint" style="margin-top:6px">To give a warning, tap the ⚠ button on the worker\'s card. At 4 warnings in a month, 4 h are deducted.</div>';
   const ps = L.map((w, i) => ({ w, i })).filter(x => x.w.pen);
   $('sPn').textContent = ps.length ? ps.length + ' today' : 'none today';
   $('pnS').innerHTML = (!ps.length ? '<div class="hint">No penalties today.</div>' : ps.map(x => '<div class="it"><b>' + esc(x.w.name) + '</b> · <b style="color:#C62828">−' + esc(x.w.pen) + ' h</b> <button class="grey sm" onclick="penDel(' + x.i + ')">Remove</button></div>').join('')) +
@@ -879,11 +879,11 @@ function penDel(i){
   ask({ title: 'Remove penalty', names: [w.name], yes: 'Remove', txt: 'Reason (optional)', en: 'Remove the ' + w.pen + ' h penalty for today? The removal is recorded.' },
     f => call('removePenalty', [PIN, w.name, '', f.txt || ''], d => { render(d); toast(w.name + ': penalty removed', true); }));
 }
-/** Warning – counted per month; every 6th warning takes 4 h off basic hours (server does it). */
+/** Warning – counted per month; every 4th warning takes 4 h off basic hours (server does it). */
 function warnW(i){
   const w = window._list[i], n = (w.warn || 0) + 1, cut = n % 6 === 0;
   ask({ title: '⚠ Give warning', names: [w.name], yes: 'Give warning ' + n, warn: true, txt: 'Reason (required)', txtReq: true, txtMsg: 'Write the reason',
-        en: w.name + ' has ' + (w.warn || 0) + ' warning(s) this month.\n' + (cut ? 'This is warning ' + n + ': 4 HOURS will be deducted from his basic hours today.' : 'This will be warning ' + n + '. At 6 warnings in a month, 4 hours are deducted from basic hours.') },
+        en: w.name + ' has ' + (w.warn || 0) + ' warning(s) this month.\n' + (cut ? 'This is warning ' + n + ': 4 HOURS will be deducted from his basic hours today.' : 'This will be warning ' + n + '. At 4 warnings in a month, 4 hours are deducted from basic hours.') },
     f => warnSign(w.name, n, f.txt, sig => call('addWarning', [PIN, w.name, f.txt, sig], d => { render(d); toast(w.name + ': warning ' + n + (cut ? ' – 4 h deducted' : ''), true); if (d.letter) wlShow(d.letter); })));
 }
 /** Worker signs to acknowledge the warning; "Refused to sign" is recorded with the giver as witness. */
@@ -909,7 +909,7 @@ function wlShow(L){
     '<p style="border-left:3px solid #C62828;padding:4px 10px;background:#FFF5F5"><b>' + esc(L.reason) + '</b></p>' +
     '<p>This is your <b>' + ord(L.n) + '</b> warning in ' + esc(mon) + ' (shift date ' + esc(niceD(L.ds)) + ').' +
     (L.cut ? ' As this is your ' + ord(L.n) + ' warning this month, <b>4 (four) hours have been deducted</b> from your basic hours for ' + esc(niceD(L.ds)) + ', as per company policy.'
-           : ' On the 6th warning in a month, 4 hours are deducted from basic hours.') + '</p>' +
+           : ' On the 4th warning in a month, 4 hours are deducted from basic hours.') + '</p>' +
     '<p>You are required to correct this immediately. Repeated violations will lead to further disciplinary action.</p>' +
     '<div style="display:flex;flex-wrap:wrap;gap:24px;margin-top:18px">' +
       '<div style="flex:1;min-width:200px"><div class="hint">Issued by</div><b>' + esc(L.by) + '</b><br>WORKMEC</div>' +

@@ -50,6 +50,15 @@
   .chk{width:24px;height:24px;margin:0;flex:none}
   .chk:disabled{opacity:.3}
   .onleave{border-left:5px solid var(--amber);background:#FFFBEB}
+  .dsg{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px}
+  .dsx{border:1px solid var(--line);border-radius:10px;padding:10px;background:#fff;cursor:pointer}
+  .dsx.dsw{border-left:5px solid #E0A800}
+  .dsh{font-weight:bold;margin-bottom:6px}
+  .dsr{display:flex;gap:8px;flex-wrap:wrap;margin:4px 0}
+  .dsn{flex:1;min-width:60px;text-align:center;background:#F3F6FA;border-radius:8px;padding:6px 4px}
+  .dsn b{display:block;font-size:20px}.dsn span{font-size:12px;color:var(--muted)}
+  .dsc{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}
+  .dst{border-bottom:1px solid var(--line);padding:5px 0}.dst.od{background:#FFF1F0}
   .onvac{border-left:6px solid #E0A800;background:#FFF1A8}
   .due{color:#C62828;font-weight:bold}
   .bulkbar{position:fixed;left:0;right:0;bottom:0;z-index:40;background:#fff;border-top:1px solid var(--line);box-shadow:0 -4px 12px rgba(0,0,0,.08);padding:10px 16px calc(10px + env(safe-area-inset-bottom))}
@@ -151,7 +160,7 @@ button.wait{opacity:.5;filter:grayscale(1);cursor:progress;pointer-events:none}
 
   <div id="adm" class="hidden">
     <div class="tabs" id="tabs">
-      <button data-p="live" onclick="pg('live')">👷 Live</button><button data-p="appr" onclick="pg('appr')">🔔 Approvals<span id="apBadge" class="apb"></span></button><button data-p="task" onclick="pg('task')">📋 Tasks</button><button data-p="hr" onclick="pg('hr')">💼 HR</button><button data-p="att" onclick="pg('att')">Attendance</button><button data-p="staff" onclick="pg('staff')">Staff</button><button data-p="money" onclick="pg('money')">💵 Advances &amp; Loans</button><button data-p="ls" onclick="pg('ls')">✈ Vacations</button><button data-p="co" onclick="pg('co')">🏢 Company</button><button data-p="set" onclick="pg('set')">Settings</button>
+      <button data-p="dash" onclick="pg('dash')">📊 Dashboard</button><button data-p="live" onclick="pg('live')">👷 Live</button><button data-p="appr" onclick="pg('appr')">🔔 Approvals<span id="apBadge" class="apb"></span></button><button data-p="task" onclick="pg('task')">📋 Tasks</button><button data-p="hr" onclick="pg('hr')">💼 HR</button><button data-p="att" onclick="pg('att')">Attendance</button><button data-p="staff" onclick="pg('staff')">Staff</button><button data-p="money" onclick="pg('money')">💵 Advances &amp; Loans</button><button data-p="ls" onclick="pg('ls')">✈ Vacations</button><button data-p="co" onclick="pg('co')">🏢 Company</button><button data-p="set" onclick="pg('set')">Settings</button>
     </div>
     <div class="card" data-pg="live">
       <div class="row"><b style="flex:1">👷 Who is at work now</b><span class="hint" id="lvT"></span><button class="grey sm" onclick="liveLoad()">⟳ Refresh</button></div>
@@ -167,6 +176,8 @@ button.wait{opacity:.5;filter:grayscale(1);cursor:progress;pointer-events:none}
       <div class="hint">Slips update by themselves every morning at 08:00. Tap a worker to open his payslip.</div>
       <div id="hrL" style="margin-top:8px"></div>
     </div>
+    <div class="card" data-pg="dash"><div id="dsB">Loading…</div></div>
+    <div class="card" data-pg="dash" id="dsTc"><div id="dsT"></div></div>
     <div class="card" data-pg="task">
       <b>New task</b>
       <input id="tkTitle" placeholder="Task title" maxlength="120" style="width:100%;margin-top:8px">
@@ -460,7 +471,7 @@ function doLogin(auto){
     TOK = r.tok; PIN = 'T:' + r.tok; $('pin').value = ''; LAST = Date.now(); sesSave(); $('lo').classList.remove('hidden');
     window._main = !!r.main; window._role = r.role; $('myd').classList.remove('hidden'); if (r.bell === false) $('bell').classList.add('hidden'); else { $('bell').classList.remove('hidden'); ntPoll(); } if (r.role === 'SUP') setTimeout(() => { qBar(); qSync(); }, 500);
     $('login').classList.add('hidden');
-    if (r.role === 'ADMIN') { $('adm').classList.remove('hidden'); $('hdr').textContent = r.name || 'Admin'; admTabs(r.tabs); mkFold(); loadStaff(); if (tabOk('appr')) apLoad(); let p = 'att'; try { p = localStorage.getItem('admPg') || 'att'; } catch (e) {} pg(p); }
+    if (r.role === 'ADMIN') { $('adm').classList.remove('hidden'); $('hdr').textContent = r.name || 'Admin'; admTabs(r.tabs); mkFold(); loadStaff(); if (tabOk('appr')) apLoad(); pg('dash'); }
     else if (r.role === 'WORKER') { $('wrk').classList.remove('hidden'); $('hdr').textContent = 'Hello ' + r.name; wkLoad(); }
     else { $('sup').classList.remove('hidden'); if (r.roster) render(r.roster); else refresh(); getLoc(() => {}, true); }   // ask location permission early
   }, e => { PIN = ''; $('login').classList.remove('hidden'); $('hdr').textContent = 'Enter your password'; if (auto) { sesClear(); $('pin').value = ''; } toast(e, false); });
@@ -1219,7 +1230,7 @@ function sigClear(){ const c = $('sigPad'), x = c.getContext('2d'); x.fillStyle 
 /* ---- admin pages ---- */
 const TABNM = { live: '👷 Live', appr: '🔔 Approvals', task: '📋 Tasks', hr: '💼 HR', att: 'Attendance', staff: 'Staff', money: '💵 Advances & Loans', ls: '✈ Vacations', co: '🏢 Company', set: 'Settings' };
 const TAB_ALL = Object.keys(TABNM);
-const tabOk = p => (window._tabs || TAB_ALL).indexOf(p) >= 0;
+const tabOk = p => p === 'dash' || (window._tabs || TAB_ALL).indexOf(p) >= 0;
 function admTabs(t){   // only the pages Haroon allowed for this admin
   window._tabs = Array.isArray(t) && t.length ? t : TAB_ALL;
   document.querySelectorAll('#tabs button').forEach(b => b.style.display = tabOk(b.dataset.p) ? '' : 'none');
@@ -1228,7 +1239,7 @@ function admTabs(t){   // only the pages Haroon allowed for this admin
 const tabBoxes = (cls, sel) => TAB_ALL.map(k => '<label style="display:inline-flex;align-items:center;gap:4px;margin:3px 10px 3px 0;white-space:nowrap"><input type="checkbox" class="' + cls + '" value="' + k + '"' + (sel.indexOf(k) >= 0 ? ' checked' : '') + '>' + esc(TABNM[k]) + '</label>').join('');
 const tabPicked = cls => [...document.querySelectorAll('.' + cls + ':checked')].map(c => c.value);
 function pg(p){
-  if (!tabOk(p)) p = window._tabs[0];
+  if (!tabOk(p)) p = 'dash';
   document.querySelectorAll('#adm [data-pg]').forEach(c => c.style.display = c.dataset.pg === p && !(c.id === 'lgCard' && !window._main) ? '' : 'none');
   document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.p === p));
   try { localStorage.setItem('admPg', p); } catch (e) {}
@@ -1236,6 +1247,7 @@ function pg(p){
   if (p === 'set') { lgLoad(); wpDraw(); }
   if (p === 'staff') prLoad();
   if (p === 'co') coLoad();
+  if (p === 'dash') dsLoad();
   if (p === 'appr') apLoad();
   if (p === 'att') attShow();
   if (p === 'task') tkLoad();
@@ -1699,6 +1711,39 @@ function coUp(inp, id){
   img.onload = () => { URL.revokeObjectURL(url); const c = document.createElement('canvas'), sc = Math.min(1, 1600 / Math.max(img.width, img.height));
     c.width = Math.round(img.width * sc); c.height = Math.round(img.height * sc); c.getContext('2d').drawImage(img, 0, 0, c.width, c.height); go(c.toDataURL('image/jpeg', 0.8)); };
   img.onerror = () => toast('Could not read the file', false); img.src = url;
+}
+/* ---- 📊 Dashboard: one look at every page (tap a box to open its page) ---- */
+function dsLoad(){ $('dsB').innerHTML = '<div class="hint">Loading…</div>'; call('dashData', [PIN], dsDraw); }
+function dsDraw(d){
+  const box = (pgK, title, body, warn) => '<div class="dsx' + (warn ? ' dsw' : '') + '" onclick="if(!event.target.closest(\'button,a\'))pg(\'' + pgK + '\')"><div class="dsh">' + title + ' <span class="hint">›</span></div>' + body + '</div>';
+  const err = x => x && x.err ? '<div class="hint">Could not load: ' + esc(x.err) + '</div>' : '';
+  const big = (n, l, col) => '<div class="dsn"><b style="color:' + (col || 'var(--blue)') + '">' + n + '</b><span>' + l + '</span></div>';
+  let h = '';
+  if (d.live) h += box('live', '👷 Today', err(d.live) || d.live.map(x => '<div style="margin-bottom:6px"><b>' + (x.shift === 'DAY' ? '☀ Day' : '🌙 Night') + '</b> <span class="hint">' + esc(x.day) + ' ' + esc(niceD(x.ds)) + (x.now ? ' · ● now' : '') + '</span>' +
+      '<div class="dsr">' + big(x.c.IN, 'In', '#2E7D32') + big(x.c.OUT, 'Left') + big(x.c.LV, 'Leave', '#B26A00') + big(x.c.NO, 'Not in', x.c.NO ? '#C62828' : '#666') + '</div>' +
+      (x.notIn.length && x.now ? '<div class="hint">Not in: ' + x.notIn.map(esc).join(', ') + '</div>' : '') + '</div>').join(''), d.live.some && d.live.some(x => x.now && x.c.NO));
+  if (d.appr) { const a = d.appr, n = (a.leave || 0) + (a.docs || 0) + (a.reqs || 0);
+    h += box('appr', '🔔 Waiting for you', err(a) || ('<div class="dsr">' + big(a.leave, 'Leave', a.leave ? '#C62828' : '#666') + big(a.docs, 'Documents', a.docs ? '#C62828' : '#666') + big(a.reqs, 'Requests', a.reqs ? '#C62828' : '#666') + '</div>' +
+      (a.leaveNames && a.leaveNames.length ? '<div class="hint">' + a.leaveNames.map(esc).join(' · ') + '</div>' : n ? '' : '<div class="hint">Nothing waiting 👍</div>')), n > 0); }
+  if (d.vac) { const v = d.vac;
+    h += box('ls', '✈ Vacations', err(v) || ('<div class="dsr">' + big((v.on || []).length, 'On vacation', '#1565C0') + big((v.booked || []).length, 'Booked', '#6A1B9A') + big((v.due || []).length, 'Due ≤30 days', (v.due || []).length ? '#B26A00' : '#666') + '</div>' +
+      (v.on || []).map(x => '<div class="hint">✈ ' + esc(x.name) + (x.back ? ' – back ' + esc(niceD(x.back)) : '') + '</div>').join('') +
+      (v.booked || []).map(x => '<div class="hint">📅 ' + esc(x.name) + ' from ' + esc(niceD(x.from)) + '</div>').join('') +
+      (v.due || []).slice(0, 5).map(x => '<div class="hint">✅ ' + esc(x.name) + ' eligible ' + esc(niceDY(x.next)) + '</div>').join('') +
+      (v.nodate ? '<div class="hint">❓ ' + v.nodate + ' without joining date / history</div>' : ''))); }
+  if (d.exp) h += box(tabOk('staff') ? 'staff' : 'co', '📄 Documents expiring (30 days)', err(d.exp) || (!d.exp.length ? '<div class="hint">Nothing expires in the next 30 days 👍</div>' :
+      d.exp.map(x => '<div>' + (x.days < 0 ? '🔴' : x.days <= 15 ? '🟠' : '🟡') + ' <b>' + esc(x.name) + '</b> – ' + esc(x.doc) + ' · ' + esc(niceDY(x.exp)) + ' <span class="hint">(' + (x.days < 0 ? 'expired' : x.days + ' d') + ')</span></div>').join('')), d.exp.length > 0);
+  if (d.pay) h += box('hr', '💼 Payroll – ' + esc(d.pay.label || ''), err(d.pay) || ('<div class="dsr">' + big(hrAed(d.pay.total).replace('AED ', ''), 'Workers so far (AED)') + big(hrAed(d.pay.mgTotal).replace('AED ', ''), 'Management (AED)') + '</div>' +
+      '<div class="hint">' + d.pay.workers + ' workers · advances / loans / deductions ' + hrAed(d.pay.ded) + ' · month closes ' + esc(d.pay.closeOn) + '</div>'));
+  $('dsB').innerHTML = '<div class="hint" style="margin-bottom:6px">Updated ' + esc(d.now) + ' <button class="grey sm" onclick="dsLoad()">⟳ Refresh</button></div><div class="dsg">' + h + '</div>';
+  if (d.tasks) {
+    const t = d.tasks, row = (x, mine) => '<div class="dst' + (x.over ? ' od' : '') + '"><b>' + (x.priv ? '🔒 ' : '') + esc(x.title) + '</b><div class="hint">' + (mine ? (x.by && x.by !== x.to ? 'from ' + esc(tkWho(x.by)) + ' · ' : '') : 'to ' + esc(tkWho(x.to)) + ' · ') +
+      'due ' + esc(niceD(x.due)) + (x.over ? ' · <b style="color:#C62828">OVERDUE</b>' : '') + ' · ' + esc(x.status) + (x.remAt ? ' · ⏰ ' + esc(x.remAt.slice(5)) : '') + '</div></div>';
+    $('dsT').innerHTML = t.err ? '<div class="hint">Could not load: ' + esc(t.err) + '</div>' : '<div class="dsc"><div><div class="dsh">📌 My tasks (' + t.mine.filter(x => x.status !== 'Done').length + ' open)</div>' + (t.mine.length ? t.mine.map(x => row(x, true)).join('') : '<div class="hint">No task for you.</div>') + '</div>' +
+      '<div><div class="dsh">📤 Tasks I gave (' + t.gave.filter(x => x.status !== 'Done').length + ' open)</div>' + (t.gave.length ? t.gave.map(x => row(x, false)).join('') : '<div class="hint">You gave no task.</div>') + '</div></div>' +
+      '<button class="pri" style="width:100%;margin-top:8px" onclick="pg(\'task\')">📋 Open Tasks / give a task</button>';
+    $('dsTc').style.display = '';
+  } else $('dsTc').style.display = 'none';
 }
 function apLoad(){ call('listApprovals', [PIN], apDraw); lrLoad(); dqLoad(); }
 function apDraw(res){

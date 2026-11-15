@@ -172,7 +172,10 @@ button.wait{opacity:.5;filter:grayscale(1);cursor:progress;pointer-events:none}
       <input id="tkTitle" placeholder="Task title" maxlength="120" style="width:100%;margin-top:8px">
       <textarea id="tkDet" rows="3" maxlength="1500" placeholder="Details (optional)" style="width:100%;margin-top:6px;font-size:15px;padding:8px;border-radius:8px;border:1px solid var(--line);font-family:inherit"></textarea>
       <div class="row" style="margin-top:6px"><label style="flex:1">Start<br><input type="date" id="tkStart" style="width:100%"></label><label style="flex:1">Due<br><input type="date" id="tkDue" style="width:100%"></label></div>
-      <div style="margin-top:6px">Assign to: <span id="tkTo"></span></div>
+      <label style="display:flex;align-items:center;gap:8px;margin-top:8px;font-weight:bold"><input type="checkbox" id="tkPriv" class="chk" onchange="$('tkToBox').style.display = this.checked ? 'none' : ''"> 🔒 Private – only for me (nobody else sees it)</label>
+      <div id="tkToBox" style="margin-top:6px">Assign to: <span id="tkTo"></span></div>
+      <div style="margin-top:8px"><b>⏰ Reminder</b> <span class="hint">(optional – to the person's bell, phone and own email)</span>
+        <div class="row" style="margin-top:4px"><input type="datetime-local" id="tkRem" style="flex:2;min-width:180px"><select id="tkRep" style="flex:1"><option>Once</option><option value="Daily">Every day</option><option value="Weekly">Every week</option></select></div></div>
       <button class="pri" style="width:100%;margin-top:8px" onclick="tkAdd()">Give task</button>
     </div>
     <div class="card" data-pg="task"><div class="row"><b style="flex:1">Timeline</b><button class="grey sm" onclick="tkLoad()">Refresh</button></div><div id="tkA"></div></div>
@@ -559,7 +562,8 @@ function tkDraw(ts, today, admin){
     ts.slice().sort((a, b) => (a.status === 'Done' || a.status === 'Cancelled') - (b.status === 'Done' || b.status === 'Cancelled') || a.due.localeCompare(b.due)).map(t => {
       const k = ts.indexOf(t), o = tkOver(t, today), fin = t.status === 'Done' || t.status === 'Cancelled';
       return '<div class="tk' + (o ? ' od' : '') + '"><div class="row"><b style="flex:1">' + esc(t.title) + '</b><span class="tst ' + TST[t.status] + '">' + esc(t.status) + '</span></div>' +
-        '<div class="hint">' + (admin ? 'To <b>' + esc(t.to) + '</b> · ' : '') + niceD(t.start) + ' → due ' + niceD(t.due) + (o ? ' · <b style="color:#C62828">OVERDUE</b>' : '') + '</div>' +
+        '<div class="hint">' + (t.priv ? '🔒 <b>Private</b> · ' : admin ? 'To <b>' + esc(tkWho(t.to)) + '</b> · ' : '') + niceD(t.start) + ' → due ' + niceD(t.due) + (o ? ' · <b style="color:#C62828">OVERDUE</b>' : '') +
+          (t.remAt && !fin ? ' · ⏰ ' + esc(niceD(t.remAt.slice(0, 10)) + ' ' + t.remAt.slice(11)) + (t.rep && t.rep !== 'Once' ? ' (' + (t.rep === 'Daily' ? 'every day' : 'every week') + ')' : '') : '') + '</div>' +
         (t.details ? '<div style="margin-top:4px;white-space:pre-wrap">' + esc(t.details) + '</div>' : '') +
         (t.updates.length ? '<div class="up">' + t.updates.map(esc).join('\n') + '</div>' : '') +
         (t.status === 'Cancelled' ? '' : '<div class="row" style="margin-top:6px"><select id="tkS' + k + '">' + Object.keys(TST).filter(s => s !== 'Cancelled').map(s => '<option' + (s === t.status ? ' selected' : '') + '>' + s + '</option>').join('') + '</select>' +
@@ -694,17 +698,21 @@ function hrInc(){
 function tkRes(r){ if (r.admin) tkAdmin(r); else { window._d.tasks = r.tasks; tkDraw(r.tasks, r.today, false); } }
 function tkAdmin(r){
   window._sups = r.sups; window._tkAdm = true; TG_ON = !!r.tg;
-  if (!$('tkTo').dataset.done) { $('tkTo').innerHTML = r.sups.map(n => '<label style="display:inline-block;margin-right:12px"><input type="checkbox" class="tkTo" value="' + esc(n) + '"> ' + esc(n) + '</label>').join(''); $('tkTo').dataset.done = 1; }
+  if (!$('tkTo').dataset.done) { const bx = (n, l) => '<label style="display:inline-block;margin-right:12px"><input type="checkbox" class="tkTo" value="' + esc(n) + '"> ' + esc(l) + '</label>';
+    $('tkTo').innerHTML = '<div class="hint" style="margin:4px 0 0">Supervisors</div>' + r.sups.map(n => bx(n, n)).join('') + '<div class="hint" style="margin:4px 0 0">Admins</div>' + (r.adms || []).map(n => bx(n, tkWho(n))).join(''); $('tkTo').dataset.done = 1; }
   if (!$('tkStart').value) { $('tkStart').value = r.today; $('tkDue').value = r.today; }
   tkDraw(r.tasks, r.today, true);
 }
 function tkLoad(){ call('listTasks', [PIN], tkAdmin); }
+const tkWho = n => String(n || '').replace(/^Admin \((.*)\)$/, '$1 (admin)');
 function tkAdd(){
-  const t = { title: $('tkTitle').value.trim(), details: $('tkDet').value.trim(), start: $('tkStart').value, due: $('tkDue').value, to: [...document.querySelectorAll('.tkTo:checked')].map(c => c.value) };
+  const t = { title: $('tkTitle').value.trim(), details: $('tkDet').value.trim(), start: $('tkStart').value, due: $('tkDue').value, to: [...document.querySelectorAll('.tkTo:checked')].map(c => c.value),
+              priv: $('tkPriv').checked, remAt: $('tkRem').value, rep: $('tkRep').value };
   if (!t.title) { toast('Write the task title', false); return; }
-  if (!t.to.length) { toast('Choose the supervisor', false); return; }
+  if (!t.priv && !t.to.length) { toast('Choose who gets the task (or tick Private)', false); return; }
   if (!t.start || !t.due || t.due < t.start) { toast('Check the start and due dates', false); return; }
-  call('addTask', [PIN, t], r => { toast('Task given to ' + t.to.join(', '), true); $('tkTitle').value = ''; $('tkDet').value = ''; document.querySelectorAll('.tkTo').forEach(c => c.checked = false); tkAdmin(r); });
+  call('addTask', [PIN, t], r => { toast(t.priv ? 'Private task saved' : 'Task given to ' + t.to.map(tkWho).join(', '), true); $('tkTitle').value = ''; $('tkDet').value = ''; $('tkRem').value = ''; $('tkRep').value = 'Once'; $('tkPriv').checked = false; $('tkToBox').style.display = '';
+    document.querySelectorAll('.tkTo').forEach(c => c.checked = false); tkAdmin(r); });
 }
 function tkUpd(k){
   const t = window._tk[k], st = $('tkS' + k).value, rp = $('tkR' + k).value.trim();
@@ -715,8 +723,10 @@ function tkEdit(k){
   const t = window._tk[k];
   ask({ title: 'Edit task', names: [t.to], yes: 'Save', en: 'Change the task, then Save.',
         html: '<input id="teT" value="' + esc(t.title) + '" maxlength="120" style="width:100%;margin-bottom:6px"><textarea id="teD" rows="3" maxlength="1500" style="width:100%;font-family:inherit;font-size:15px">' + esc(t.details) + '</textarea>' +
-              '<div class="row"><label style="flex:1">Start<br><input type="date" id="teS" value="' + t.start + '"></label><label style="flex:1">Due<br><input type="date" id="teU" value="' + t.due + '"></label></div>' },
-    () => call('editTask', [PIN, t.id, { title: $('teT').value, details: $('teD').value, start: $('teS').value, due: $('teU').value }], r => { toast('Task changed', true); tkAdmin(r); }));
+              '<div class="row"><label style="flex:1">Start<br><input type="date" id="teS" value="' + t.start + '"></label><label style="flex:1">Due<br><input type="date" id="teU" value="' + t.due + '"></label></div>' +
+              '<div style="margin-top:6px"><b>⏰ Reminder</b> <span class="hint">(empty = off)</span><div class="row"><input type="datetime-local" id="teR" value="' + esc((t.remAt || '').replace(' ', 'T')) + '" style="flex:2"><select id="teP" style="flex:1">' +
+              [['Once', 'Once'], ['Daily', 'Every day'], ['Weekly', 'Every week']].map(o => '<option value="' + o[0] + '"' + (t.rep === o[0] ? ' selected' : '') + '>' + o[1] + '</option>').join('') + '</select></div></div>' },
+    () => call('editTask', [PIN, t.id, { title: $('teT').value, details: $('teD').value, start: $('teS').value, due: $('teU').value, remAt: $('teR').value, rep: $('teP').value }], r => { toast('Task changed', true); tkAdmin(r); }));
 }
 function tkCancel(k){
   const t = window._tk[k];

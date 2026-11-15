@@ -400,6 +400,11 @@ button.wait{opacity:.5;filter:grayscale(1);cursor:progress;pointer-events:none}
 </div>
 <input id="docCam" type="file" accept="image/*" capture="environment" style="display:none" onchange="docTake(this)">
 <div id="wlM"><div class="box" id="wlB"></div></div>
+<div id="evM" style="display:none;position:fixed;inset:0;background:#000;z-index:65;flex-direction:column;align-items:center;justify-content:center;padding:10px">
+  <video id="evV" autoplay muted playsinline style="max-width:100%;max-height:70vh;background:#111;border-radius:8px"></video>
+  <div id="evT" style="color:#fff;font-size:22px;font-weight:700;margin:10px">● 0 / 30 s</div>
+  <div class="btns"><button class="grey" onclick="evRecEnd(false)">Cancel</button><button class="out" onclick="evRecEnd(true)">⏹ Stop and use</button></div>
+</div>
 <div id="hrM" style="display:none;position:fixed;inset:0;background:var(--bg);z-index:45;overflow:auto;padding:12px 12px 40px"><div style="max-width:720px;margin:0 auto" id="hrB"></div></div>
 <div id="sigM"><div class="box">
   <h3 id="sigH">Leave salary – signature</h3>
@@ -998,10 +1003,11 @@ function penDel(i){
 }
 /** Warning – counted per month; every 4th warning takes 4 h off basic hours (server does it). */
 function warnW(i){
-  const w = window._list[i], n = (w.warn || 0) + 1, cut = n % 6 === 0;
+  const w = window._list[i], n = (w.warn || 0) + 1, cut = n % 4 === 0;
   ask({ title: '⚠ Give warning', names: [w.name], yes: 'Give warning ' + n, warn: true, txt: 'Reason (required)', txtReq: true, txtMsg: 'Write the reason',
         en: w.name + ' has ' + (w.warn || 0) + ' warning(s) this month.\n' + (cut ? 'This is warning ' + n + ': 4 HOURS will be deducted from his basic hours today.' : 'This will be warning ' + n + '. At 4 warnings in a month, 4 hours are deducted from basic hours.') },
-    f => warnSign(w.name, n, f.txt, sig => call('addWarning', [PIN, w.name, f.txt, sig], d => { render(d); toast(w.name + ': warning ' + n + (cut ? ' – 4 h deducted' : ''), true); if (d.letter) wlShow(d.letter); })));
+    f => { EV = null; evStep({ name: w.name, req: window._role !== 'ADMIN', done: () => warnSign(w.name, n, f.txt, sig => evSend(w.name, ev =>
+      call('addWarning', [PIN, w.name, f.txt, sig, ev], d => { render(d); toast(w.name + ': warning ' + n + (cut ? ' – 4 h deducted' : ''), true); if (d.letter) wlShow(d.letter); }))) }); });
 }
 /** Worker signs to acknowledge the warning; "Refused to sign" is recorded with the giver as witness. */
 /* ---- ✍ supervisor takes the worker's signature for a warning that an admin gave ---- */
@@ -1013,6 +1019,49 @@ function wsSign(i, k){
     if (s.sig) { go(s.sig); return; }
     ask({ title: 'Refused to sign', names: [w.name], yes: 'Yes, he refused', warn: true, en: 'Record that ' + w.name + ' REFUSED to sign this warning?\nYou are recorded as the witness.' }, () => go(''));
   });
+}
+/* ---- 📎 Evidence for a warning (Haroon 15 Nov): photo or video max 30 s. Must for supervisors, optional for admins. ---- */
+let EV = null, EVCTX = null, EVREC = null;
+function evStep(o){
+  EVCTX = o;
+  const pv = !EV ? '<div class="hint" style="margin-top:6px">Nothing attached yet.</div>' :
+    '<div style="margin-top:8px">' + (EV.kind === 'photo' ? '<img src="' + EV.url + '" style="max-width:100%;max-height:220px;border-radius:8px">' : '<video src="' + EV.url + '" controls playsinline style="max-width:100%;max-height:220px;border-radius:8px"></video>') +
+    '<div class="hint">' + (EV.kind === 'photo' ? '📷 Photo' : '🎥 Video') + ' attached · <a href="#" onclick="EV=null;evStep(EVCTX);return false">remove</a></div></div>';
+  const lb = 'display:inline-block;padding:8px 12px;border-radius:8px;background:#6B7280;color:#fff;font-weight:600;cursor:pointer;margin:4px 4px 0 0';
+  ask({ title: '📎 Evidence – ' + o.name, names: [o.name], yes: 'Next ➜ signature',
+        en: (o.req ? 'REQUIRED: ' : 'Optional for admins: ') + 'take a photo or record a short video (max 30 seconds) that shows the reason. It is saved with the warning, so the warning cannot be challenged later.',
+        html: '<label style="' + lb + '">📷 Photo<input type="file" accept="image/*" capture="environment" style="display:none" onchange="evPhoto(this)"></label>' +
+              '<button class="grey" style="margin:4px 4px 0 0" onclick="evRec()">🎥 Record video (30 s)</button>' +
+              '<label style="' + lb + ';background:#9CA3AF">📁 Choose video<input type="file" accept="video/*" style="display:none" onchange="evFile(this)"></label>' + pv },
+    () => { if (o.req && !EV) { toast('Evidence is required – take a photo or a video', false); evStep(o); return; } o.done(); });
+}
+function evPhoto(inp){ const f = inp.files && inp.files[0]; if (!f) return; fileData(f).then(d => { EV = { kind: 'photo', data: d, url: d }; evStep(EVCTX); }, e => toast(String(e), false)); }
+function evBlob(b){ const rd = new FileReader(); rd.onload = () => { EV = { kind: 'video', data: rd.result, url: URL.createObjectURL(b) }; evStep(EVCTX); }; rd.readAsDataURL(b); }
+function evFile(inp){
+  const f = inp.files && inp.files[0]; if (!f) return;
+  if (f.size > 20e6) { toast('Video too large (' + Math.round(f.size / 1e6) + ' MB, max 20 MB) – use 🎥 Record video in the app', false); return; }
+  evBlob(f.type ? f : new Blob([f], { type: 'video/mp4' }));
+}
+async function evRec(){
+  if (!navigator.mediaDevices || !window.MediaRecorder) { toast('This phone cannot record here – use 📁 Choose video', false); return; }
+  let st; try { st = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: { ideal: 640 }, height: { ideal: 480 } }, audio: true }); }
+  catch (e) { toast('Camera not allowed – allow the camera for this site, or use 📁 Choose video', false); return; }
+  const mt = ['video/mp4;codecs=avc1', 'video/mp4', 'video/webm;codecs=vp8,opus', 'video/webm'].find(t => MediaRecorder.isTypeSupported(t)) || '';
+  const rec = new MediaRecorder(st, Object.assign({ videoBitsPerSecond: 700000, audioBitsPerSecond: 64000 }, mt ? { mimeType: mt } : {})), ch = [];
+  rec.ondataavailable = e => { if (e.data && e.data.size) ch.push(e.data); };
+  EVREC = { rec: rec, st: st, keep: false, t0: Date.now() };
+  rec.onstop = () => { st.getTracks().forEach(t => t.stop()); clearInterval(EVREC.tm); $('evM').style.display = 'none';
+    if (EVREC.keep && ch.length) evBlob(new Blob(ch, { type: (rec.mimeType || mt || 'video/webm').split(';')[0] })); else evStep(EVCTX); };
+  $('modal').style.display = 'none'; $('evV').srcObject = st; $('evM').style.display = 'flex'; $('evT').textContent = '● 0 / 30 s';
+  rec.start(1000);
+  EVREC.tm = setInterval(() => { const s = Math.floor((Date.now() - EVREC.t0) / 1000); $('evT').textContent = '● ' + s + ' / 30 s'; if (s >= 30) evRecEnd(true); }, 250);
+}
+function evRecEnd(keep){ if (!EVREC || EVREC.rec.state === 'inactive') return; EVREC.keep = keep; EVREC.rec.stop(); }
+/** Upload the evidence first (it can be a few MB), then continue with its Drive link. */
+function evSend(name, then){
+  if (!EV) { then(''); return; }
+  toast('Uploading evidence…', true);
+  call('warnEvidence', [PIN, name, EV.data], url => then(url));
 }
 function warnSign(name, n, why, go){
   sign({ worker: name, noRcv: true, optional: true, skipText: 'Refused to sign', title: '⚠ Warning ' + n + ' – acknowledgement',
@@ -1037,14 +1086,16 @@ function wlShow(L){
     '<p>This is your <b>' + ord(L.n) + '</b> warning in ' + esc(mon) + ' (shift date ' + esc(niceD(L.ds)) + ').' +
     (L.cut ? ' As this is your ' + ord(L.n) + ' warning this month, <b>4 (four) hours have been deducted</b> from your basic hours for ' + esc(niceD(L.ds)) + ', as per company policy.'
            : ' On the 4th warning in a month, 4 hours are deducted from basic hours.') + '</p>' +
+    (L.evOn ? '<p>Evidence (photo / video taken at the time) is kept on file with this letter.</p>' : '') +
     '<p>You are required to correct this immediately. Repeated violations will lead to further disciplinary action.</p>' +
     '<div style="display:flex;flex-wrap:wrap;gap:24px;margin-top:18px">' +
-      '<div style="flex:1;min-width:200px"><div class="hint">Issued by</div><b>' + esc(L.by) + '</b><br>WORKMEC</div>' +
+      '<div style="flex:1;min-width:200px"><div class="hint">Issued by</div><b>Management</b><br>WORKMEC FZE</div>' +
       '<div style="flex:1;min-width:200px"><div class="hint">Employee acknowledgement</div>' +
         (L.sig ? '<div class="sgx"><img src="' + L.sig + '" alt="signature" style="max-width:100%"></div><div style="font-size:12px">' + esc(L.name) + '</div>'
                : '<div class="sgx" style="color:#C62828;font-weight:700;text-align:center;padding:6px">' + esc(L.ack || 'Not signed') + '</div>') +
       '</div></div>' +
     (L.pdf ? '<div class="noprint" style="margin-top:10px"><a href="' + esc(L.pdf) + '" target="_blank">📁 PDF copy in Google Drive</a></div>' : '') +
+    (L.ev ? '<div class="noprint" style="margin-top:6px"><a href="' + esc(L.ev) + '" target="_blank">📎 Evidence (photo / video)</a></div>' : '') +
     '<div class="btns noprint"><button class="grey" onclick="$(\'wlM\').style.display=\'none\'">Close</button><button class="pri" onclick="window.print()">🖨 Print / PDF</button></div>';
   $('wlM').style.display = 'flex';
 }
@@ -1888,7 +1939,7 @@ function wnDraw(l){
     return '<div style="padding:8px 0;border-bottom:1px solid var(--line)"><b>' + esc(n) + '</b> · <span class="warnb' + (c >= 5 ? ' hot' : '') + '">⚠ ' + c + '</span>' +
       ws.map(w => '<div style="margin-top:4px">' + (w.type === 'P' ? '<b style="color:#C62828">−4 h</b> ' + niceD(w.ds) + ' · ' + esc(w.reason)
         : niceD(w.ds) + ' · ' + esc(w.reason) + ' · by ' + esc(w.by) + (w.signed ? ' · ✍ signed' : w.refused ? ' · <b style="color:#C62828">refused to sign</b>' : '') +
-          ' <button class="grey sm" onclick="wlOpen(\'' + esc(w.id) + '\')">📄 Letter</button> <button class="grey sm" onclick="wnDel(\'' + esc(w.id) + '\')">Remove</button>') + '</div>').join('') + '</div>';
+          (w.ev ? ' <a href="' + esc(w.ev) + '" target="_blank">📎 Evidence</a>' : '') + ' <button class="grey sm" onclick="wlOpen(\'' + esc(w.id) + '\')">📄 Letter</button> <button class="grey sm" onclick="wnDel(\'' + esc(w.id) + '\')">Remove</button>') + '</div>').join('') + '</div>';
   }).join('');
 }
 function wnCount(n){ return (window._wn || []).filter(w => w.name === n && w.type === 'W').length; }
@@ -1900,10 +1951,13 @@ function wnGive(){
   const n = wnCount(name) + 1, cut = n % 4 === 0;
   ask({ title: '⚠ Give warning', names: [name], yes: 'Give warning ' + n, warn: true,
         en: (cut ? 'This is warning ' + n + ' this month: 4 HOURS will be deducted from his basic hours today.' : 'This will be warning ' + n + ' this month.') + '\nReason: ' + why },
-    () => { const go = sig => call('addWarning', [PIN, name, why, sig], m => { toast(m.msg + (sig === 'SUP' ? ' – his supervisor will take the signature' : ''), true); $('wnReason').value = ''; wnLoad(); wlShow(m.letter); });
+    () => { EV = null; evStep({ name: name, req: false, done: () => evGive(name, n, why) }); });
+}
+function evGive(name, n, why){
+  { const go = sig => evSend(name, ev => call('addWarning', [PIN, name, why, sig, ev], m => { toast(m.msg + (sig === 'SUP' ? ' – his supervisor will take the signature' : ''), true); $('wnReason').value = ''; wnLoad(); wlShow(m.letter); }));
       ask({ title: '✍ Signature', names: [name], yes: '👷 Supervisor takes it', en: 'Who takes ' + name + '\'s signature?\n• Supervisor: he and his supervisor are told; the supervisor gets a ✍ Sign warning button on his card.\n• Here now: only if ' + name + ' is with you.',
         html: '<button class="grey" style="width:100%;margin-top:6px" id="wsHere">✍ He is here – sign now</button>' }, () => go('SUP'));
-      $('wsHere').onclick = () => { $('modal').style.display = 'none'; warnSign(name, n, why, go); }; });
+      $('wsHere').onclick = () => { $('modal').style.display = 'none'; warnSign(name, n, why, go); }; }
 }
 function wnDel(id){
   const w = window._wn.find(x => x.id === id);

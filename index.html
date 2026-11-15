@@ -789,6 +789,7 @@ function render(d){
       '<select ' + (w.inT ? 'disabled' : '') + ' onchange="abs(' + i + ',this)">' +
         '<option value="">' + (w.outT ? 'Checked out' : w.inT ? 'Active' : absent ? esc(LEAVE[w.status] || w.status) : lv ? esc(LEAVE[lv.code] || lv.code) : 'Present') + '</option>' + (locked && !isVac ? '<option value="P">✓ Present – he came to work</option>' : '') + LEAVE_OPTS +
       '</select><button class="grey sm" onclick="adv(' + i + ')">+ Advance</button>' + (lv ? '' : '<button class="grey sm" id="lvb' + i + '" onclick="lvT(' + i + ')">▸ Leave</button>') + '<button class="grey sm" style="margin-left:auto" onclick="penW(' + i + ')">⏱ Penalty</button><button class="grey sm" onclick="noteW(' + i + ')">📝 Note</button><button class="warnb' + (w.warn >= 5 ? ' hot' : '') + '" style="margin-left:auto" title="Warnings this month – tap to give a warning" onclick="warnW(' + i + ')">⚠ ' + (w.warn || 0) + '</button></div>' +
+      (w.wsign && w.wsign.length ? '<div class="row" style="margin-top:6px">' + w.wsign.map((x, k) => '<button class="out" onclick="wsSign(' + i + ',' + k + ')">✍ Sign warning – ' + esc(x.reason.slice(0, 30)) + '</button>').join('') + '</div>' : '') +
       (isVac ? '<div class="row" style="margin-top:6px"><button class="in" onclick="vacAllowW(' + i + ')">✅ Allow check-in</button><button class="grey" onclick="vacExtW(' + i + ')">➕ Extend vacation</button></div>' : '') +
       (window._pend || []).map((p, k) => p.name === w.name ? '<div class="certb">⏳ ' + esc(LEAVE[p.code]) + ' ' + niceD(p.from) + (p.days > 1 ? '–' + niceD(p.to) : '') + ' waiting for admin · <button class="grey sm" onclick="docAdd(window._pend[' + k + '])">📎 ' + (p.docs ? 'Add page (' + p.docs + ' saved)' : 'Upload supporting document') + '</button></div>' : '').join('') +
       (lv ? '' : '<div class="lvp" id="lvp' + i + '"><button class="grey" onclick="vac(' + i + ',\'AV\')">✈ Annual vacation</button><button class="grey" onclick="vac(' + i + ',\'EL\')">Emergency leave</button></div>') +
@@ -1003,6 +1004,16 @@ function warnW(i){
     f => warnSign(w.name, n, f.txt, sig => call('addWarning', [PIN, w.name, f.txt, sig], d => { render(d); toast(w.name + ': warning ' + n + (cut ? ' – 4 h deducted' : ''), true); if (d.letter) wlShow(d.letter); })));
 }
 /** Worker signs to acknowledge the warning; "Refused to sign" is recorded with the giver as witness. */
+/* ---- ✍ supervisor takes the worker's signature for a warning that an admin gave ---- */
+function wsSign(i, k){
+  const w = window._list[i], x = w.wsign[k];
+  sign({ worker: w.name, noRcv: true, optional: true, skipText: 'Refused to sign', title: '✍ Warning ' + (x.no || '') + ' – signature',
+         hint: w.name + ' signs below to acknowledge this warning (given by ' + x.by + ' on ' + niceD(x.ds) + '):', text: 'Reason: ' + x.reason }, s => {
+    const go = sig => call('signWarning', [PIN, x.id, sig], d => { render(d); toast(w.name + (sig ? ': signature saved' : ': refusal recorded'), true); });
+    if (s.sig) { go(s.sig); return; }
+    ask({ title: 'Refused to sign', names: [w.name], yes: 'Yes, he refused', warn: true, en: 'Record that ' + w.name + ' REFUSED to sign this warning?\nYou are recorded as the witness.' }, () => go(''));
+  });
+}
 function warnSign(name, n, why, go){
   sign({ worker: name, noRcv: true, optional: true, skipText: 'Refused to sign', title: '⚠ Warning ' + n + ' – acknowledgement',
          hint: name + ' signs below to acknowledge this warning:', text: 'Reason: ' + why }, s => {
@@ -1633,28 +1644,38 @@ function attShow(){
 function myOpen(){ call('myDocs', [PIN], myDraw); }
 function myDraw(r){
   if (!r.name) { ask({ title: '📄 My documents', noYes: true, en: 'Your login is not linked to a staff profile. Ask Haroon.' }); return; }
-  const st = x => x.status === 'Approved' ? '<b style="color:#2E7D32">✓ approved</b>' : x.status === 'Pending' ? '<b style="color:#B26A00">⏳ waiting for approval</b>' : '<b class="due">sent back' + (x.note ? ': ' + esc(x.note) : '') + '</b>';
-  const opts = ['Passport', 'Emirates ID', 'Visa', 'Insurance'].concat(r.docs.slice(4).map(d => d.doc)).map(d => '<option>' + esc(d) + '</option>').join('') + '<option value="">Other…</option>';
-  ask({ title: '📄 My documents – ' + r.name, noYes: true, en: 'What you send is checked by the office before it is saved. Only you and the office can see it.',
-    html: '<div style="margin:6px 0"><b>On record</b>' + r.docs.map(d => '<div class="wrow"><span>' + esc(d.doc) + '</span><span class="hint">' + (d.no ? esc(d.no) : '–') + (d.exp ? ' · exp ' + esc(niceDY(d.exp)) : '') + (d.files ? ' · 📎 ' + d.files : '') + '</span></div>').join('') + '</div>' +
-      (r.reqs.length ? '<div style="margin:6px 0"><b>Sent by me</b>' + r.reqs.map(x => '<div class="wrow"><span>' + esc(x.doc) + (x.no ? ' ' + esc(x.no) : '') + (x.exp ? ' · exp ' + esc(niceDY(x.exp)) : '') + '<br><span class="hint">' + esc(x.at) + '</span></span><span>' + st(x) + '</span></div>').join('') + '</div>' : '') +
-      '<div style="margin-top:10px;border-top:2px solid var(--line);padding-top:6px"><b>➕ Send a document</b>' +
-      '<select id="myD" style="width:100%;margin-top:6px" onchange="$(\'myO\').style.display = this.value ? \'none\' : \'\'">' + opts + '</select>' +
-      '<input id="myO" placeholder="Document name (e.g. Labour card)" style="width:100%;margin-top:6px;display:none">' +
-      '<input id="myN" placeholder="Number" style="width:100%;margin-top:6px"><label style="display:block;margin-top:6px">Expiry date<input id="myE" type="date" style="width:100%"></label>' +
-      '<label class="grey" style="display:inline-block;margin-top:8px;padding:8px 12px;border-radius:8px;background:#6B7280;color:#fff;cursor:pointer">📷 Photo / PDF of the document<input id="myF" type="file" accept="image/*,application/pdf" style="display:none" onchange="$(\'myFn\').textContent = this.files[0] ? this.files[0].name : \'\'"></label> <span id="myFn" class="hint"></span>' +
-      '<button class="pri" style="width:100%;margin-top:10px" onclick="mySend()">Send to office</button></div>' });
+  window._my = r;
+  const st = x => x.status === 'Approved' ? '<b style="color:#2E7D32">✓ approved</b>' : x.status === 'Pending' ? '<b style="color:#B26A00">⏳ waiting</b>' : '<b class="due">sent back' + (x.note ? ': ' + esc(x.note) : '') + '</b>';
+  const docs = r.docs.concat([{ doc: '', no: '', exp: '', files: 0, other: true }]);
+  ask({ title: '📄 My documents – ' + r.name, noYes: true, en: 'Fill in everything you have at once, then press "Send all". The office checks it before it is saved. Only you and the office can see it.',
+    html: docs.map((d, k) => '<div class="mydr" data-k="' + k + '" style="border:1px solid var(--line);border-radius:8px;padding:8px;margin:8px 0">' +
+        (d.other ? '<b>➕ Other document</b><input class="myL" placeholder="Name (e.g. Labour card)" style="width:100%;margin-top:4px">'
+                 : '<b>' + esc(d.doc) + '</b> <span class="hint">' + (d.no || d.exp ? 'on record: ' + esc(d.no || '–') + (d.exp ? ' · exp ' + esc(niceDY(d.exp)) : '') : 'nothing on record') + (d.files ? ' · 📎 ' + d.files : '') + '</span>') +
+        '<div class="row" style="margin-top:4px"><input class="myN" placeholder="Number" value="' + esc(d.no || '') + '" style="flex:1;min-width:120px"><input class="myE" type="date" value="' + esc(d.exp || '') + '" style="flex:1" title="Expiry date"></div>' +
+        '<label class="grey sm" style="display:inline-block;margin-top:6px;padding:5px 10px;border-radius:8px;background:#6B7280;color:#fff;cursor:pointer;font-size:13px">📷 Photo / PDF<input class="myF" type="file" accept="image/*,application/pdf" style="display:none" onchange="this.parentNode.nextElementSibling.textContent = this.files[0] ? \'✓ \' + this.files[0].name : \'\'"></label> <span class="hint"></span></div>').join('') +
+      '<button class="pri" style="width:100%;margin-top:6px" onclick="mySendAll()">📤 Send all to office</button>' +
+      (r.reqs.length ? '<div style="margin-top:12px"><b>Sent by me</b>' + r.reqs.map(x => '<div class="wrow"><span>' + esc(x.doc) + (x.no ? ' ' + esc(x.no) : '') + (x.exp ? ' · exp ' + esc(niceDY(x.exp)) : '') + '<br><span class="hint">' + esc(x.at) + '</span></span><span>' + st(x) + '</span></div>').join('') + '</div>' : '') });
 }
-function mySend(){
-  const doc = $('myD').value || $('myO').value.trim(), f = $('myF').files[0];
-  if (!doc) { toast('Write the document name', false); return; }
-  const go = data => call('mySubmit', [PIN, doc, $('myN').value.trim(), $('myE').value, data || '', f ? f.name : ''], r => { toast('Sent – the office will check it', true); myDraw(r); });
-  if (!f) { go(''); return; }
-  if (f.type === 'application/pdf') { if (f.size > 8e6) { toast('PDF too large (max 8 MB)', false); return; } const rd = new FileReader(); rd.onload = () => go(rd.result); rd.readAsDataURL(f); return; }
+const fileData = f => new Promise((ok, no) => {
+  if (!f) { ok(''); return; }
+  if (f.type === 'application/pdf') { if (f.size > 8e6) { no('PDF too large (max 8 MB): ' + f.name); return; } const rd = new FileReader(); rd.onload = () => ok(rd.result); rd.readAsDataURL(f); return; }
   const img = new Image(), url = URL.createObjectURL(f);
   img.onload = () => { URL.revokeObjectURL(url); const c = document.createElement('canvas'), sc = Math.min(1, 1600 / Math.max(img.width, img.height));
-    c.width = Math.round(img.width * sc); c.height = Math.round(img.height * sc); c.getContext('2d').drawImage(img, 0, 0, c.width, c.height); go(c.toDataURL('image/jpeg', 0.8)); };
-  img.onerror = () => toast('Could not read the file', false); img.src = url;
+    c.width = Math.round(img.width * sc); c.height = Math.round(img.height * sc); c.getContext('2d').drawImage(img, 0, 0, c.width, c.height); ok(c.toDataURL('image/jpeg', 0.8)); };
+  img.onerror = () => no('Could not read ' + f.name); img.src = url;
+});
+async function mySendAll(){
+  const r = window._my, docs = r.docs.concat([{ other: true }]), items = [];
+  try {
+    for (const el of document.querySelectorAll('.mydr')) {
+      const d = docs[Number(el.dataset.k)], doc = d.other ? el.querySelector('.myL').value.trim() : d.doc, no = el.querySelector('.myN').value.trim(), exp = el.querySelector('.myE').value, f = el.querySelector('.myF').files[0];
+      if (!f && no === (d.no || '') && exp === (d.exp || '')) continue;   // nothing new for this document
+      if (!doc) { toast('Write the name of the other document', false); return; }
+      items.push({ doc: doc, no: no, exp: exp, data: await fileData(f), file: f ? f.name : '' });
+    }
+  } catch (e) { toast(String(e), false); return; }
+  if (!items.length) { toast('Nothing new to send – change a number / date or add a photo', false); return; }
+  call('mySubmitAll', [PIN, items], x => { toast(items.length + ' document(s) sent – the office will check them', true); myDraw(x); });
 }
 function fileShow(r){
   const b = atob(r.data.split(',')[1]), u8 = new Uint8Array(b.length); for (let i = 0; i < b.length; i++) u8[i] = b.charCodeAt(i);
@@ -1876,10 +1897,13 @@ function wnGive(){
   const name = $('wnWorker').value, why = $('wnReason').value.trim();
   if (!name) { toast('Select a worker', false); return; }
   if (!why) { toast('Write the reason', false); return; }
-  const n = wnCount(name) + 1, cut = n % 6 === 0;
+  const n = wnCount(name) + 1, cut = n % 4 === 0;
   ask({ title: '⚠ Give warning', names: [name], yes: 'Give warning ' + n, warn: true,
         en: (cut ? 'This is warning ' + n + ' this month: 4 HOURS will be deducted from his basic hours today.' : 'This will be warning ' + n + ' this month.') + '\nReason: ' + why },
-    () => warnSign(name, n, why, sig => call('addWarning', [PIN, name, why, sig], m => { toast(m.msg, true); $('wnReason').value = ''; wnLoad(); wlShow(m.letter); })));
+    () => { const go = sig => call('addWarning', [PIN, name, why, sig], m => { toast(m.msg + (sig === 'SUP' ? ' – his supervisor will take the signature' : ''), true); $('wnReason').value = ''; wnLoad(); wlShow(m.letter); });
+      ask({ title: '✍ Signature', names: [name], yes: '👷 Supervisor takes it', en: 'Who takes ' + name + '\'s signature?\n• Supervisor: he and his supervisor are told; the supervisor gets a ✍ Sign warning button on his card.\n• Here now: only if ' + name + ' is with you.',
+        html: '<button class="grey" style="width:100%;margin-top:6px" id="wsHere">✍ He is here – sign now</button>' }, () => go('SUP'));
+      $('wsHere').onclick = () => { $('modal').style.display = 'none'; warnSign(name, n, why, go); }; });
 }
 function wnDel(id){
   const w = window._wn.find(x => x.id === id);

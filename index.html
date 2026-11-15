@@ -126,7 +126,7 @@ button.wait{opacity:.5;filter:grayscale(1);cursor:progress;pointer-events:none}
   <h1>WORKMEC Attendance</h1>
   <button id="lo" class="hidden" onclick="logout()">Log out</button>
   <button id="bell" class="hidden" onclick="ntOpen()">🔔<span id="ntN" class="apb"></span></button>
-  <button id="myd" class="hidden" onclick="myOpen()">📄 My documents</button>
+  <button id="myd" class="hidden" onclick="myOpen()">👤 My profile</button>
   <div class="sub" id="hdr">Enter your password</div>
   <div id="clock">--:--:--</div>
   <div id="today" class="sub" style="font-size:15px;opacity:1"></div>
@@ -1720,17 +1720,23 @@ function attShow(){
 /* ---- 📄 My documents (every login): send own document details / copies – admin approves in 🔔 Approvals ---- */
 function myOpen(){ call('myDocs', [PIN], myDraw); }
 function myDraw(r){
-  if (!r.name) { ask({ title: '📄 My documents', noYes: true, en: 'Your login is not linked to a staff profile. Ask Haroon.' }); return; }
+  if (!r.name) { ask({ title: '👤 My profile', noYes: true, en: 'Your login is not linked to a staff profile. Ask Haroon.' }); return; }
   window._my = r;
   const st = x => x.status === 'Approved' ? '<b style="color:#2E7D32">✓ approved</b>' : x.status === 'Pending' ? '<b style="color:#B26A00">⏳ waiting</b>' : '<b class="due">sent back' + (x.note ? ': ' + esc(x.note) : '') + '</b>';
   const docs = r.docs.concat([{ doc: '', no: '', exp: '', files: 0, other: true }]);
-  ask({ title: '📄 My documents – ' + r.name, noYes: true, en: 'Fill in everything you have at once, then press "Send all". The office checks it before it is saved. Only you and the office can see it.',
-    html: docs.map((d, k) => '<div class="mydr" data-k="' + k + '" style="border:1px solid var(--line);border-radius:8px;padding:8px;margin:8px 0">' +
+  window._myPh = '';
+  const me = r.me || {}, inp = (id, lbl, v, type, ph) => '<label style="display:block;margin-top:6px">' + lbl + '<input id="' + id + '" type="' + type + '" value="' + esc(v || '') + '" placeholder="' + ph + '" style="width:100%"></label>';
+  ask({ title: '👤 My profile – ' + r.name, noYes: true, en: 'Fill in everything at once, then press "Save / send all". Your contact details are saved at once; documents are checked by the office first. Only you and the office can see it.',
+    html: '<div style="border:2px solid #1F6FB2;border-radius:8px;padding:8px;margin:8px 0"><b>👤 My details</b>' +
+        '<div class="row" style="align-items:center;margin-top:6px"><img id="myPhI" src="' + (me.photoData || '') + '" alt="" style="width:72px;height:72px;object-fit:cover;border-radius:50%;background:#E5E7EB;' + (me.photoData ? '' : 'display:none') + '">' +
+        '<label style="display:inline-block;padding:6px 12px;border-radius:8px;background:#6B7280;color:#fff;cursor:pointer;font-size:14px">📷 ' + (me.photoData ? 'Change photo' : 'Add my photo') + '<input type="file" accept="image/*" capture="user" style="display:none" onchange="myPhoto(this)"></label></div>' +
+        inp('myEm', '✉ Email (task invites come here)', me.email, 'email', 'name@gmail.com') + inp('myMo', '📱 Mobile (UAE)', me.mobile, 'tel', '05x xxx xxxx') + inp('myHo', '🏠 Home contact (name / number)', me.home, 'text', 'e.g. Wife – +92 300 …') + '</div>' +
+      '<div style="font-weight:bold;margin-top:10px">📄 My documents</div>' + docs.map((d, k) => '<div class="mydr" data-k="' + k + '" style="border:1px solid var(--line);border-radius:8px;padding:8px;margin:8px 0">' +
         (d.other ? '<b>➕ Other document</b><input class="myL" placeholder="Name (e.g. Labour card)" style="width:100%;margin-top:4px">'
                  : '<b>' + esc(d.doc) + '</b> <span class="hint">' + (d.no || d.exp ? 'on record: ' + esc(d.no || '–') + (d.exp ? ' · exp ' + esc(niceDY(d.exp)) : '') : 'nothing on record') + (d.files ? ' · 📎 ' + d.files : '') + '</span>') +
         '<div class="row" style="margin-top:4px"><input class="myN" placeholder="Number" value="' + esc(d.no || '') + '" style="flex:1;min-width:120px"><input class="myE" type="date" value="' + esc(d.exp || '') + '" style="flex:1" title="Expiry date"></div>' +
         '<label class="grey sm" style="display:inline-block;margin-top:6px;padding:5px 10px;border-radius:8px;background:#6B7280;color:#fff;cursor:pointer;font-size:13px">📷 Photo / PDF<input class="myF" type="file" accept="image/*,application/pdf" style="display:none" onchange="this.parentNode.nextElementSibling.textContent = this.files[0] ? \'✓ \' + this.files[0].name : \'\'"></label> <span class="hint"></span></div>').join('') +
-      '<button class="pri" style="width:100%;margin-top:6px" onclick="mySendAll()">📤 Send all to office</button>' +
+      '<button class="pri" style="width:100%;margin-top:6px" onclick="mySendAll()">📤 Save / send all</button>' +
       (r.reqs.length ? '<div style="margin-top:12px"><b>Sent by me</b>' + r.reqs.map(x => '<div class="wrow"><span>' + esc(x.doc) + (x.no ? ' ' + esc(x.no) : '') + (x.exp ? ' · exp ' + esc(niceDY(x.exp)) : '') + '<br><span class="hint">' + esc(x.at) + '</span></span><span>' + st(x) + '</span></div>').join('') + '</div>' : '') });
 }
 const fileData = f => new Promise((ok, no) => {
@@ -1751,8 +1757,27 @@ async function mySendAll(){
       items.push({ doc: doc, no: no, exp: exp, data: await fileData(f), file: f ? f.name : '' });
     }
   } catch (e) { toast(String(e), false); return; }
-  if (!items.length) { toast('Nothing new to send – change a number / date or add a photo', false); return; }
-  call('mySubmitAll', [PIN, items], x => { toast(items.length + ' document(s) sent – the office will check them', true); myDraw(x); });
+  const me = r.me || {}, det = { email: $('myEm').value.trim(), mobile: $('myMo').value.trim(), home: $('myHo').value.trim(), photo: window._myPh || '' };
+  const chg = det.photo || det.email !== (me.email || '') || det.mobile !== (me.mobile || '') || det.home !== (me.home || '');
+  if (det.email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(det.email)) { toast('Check your email address', false); return; }
+  if (!items.length && !chg) { toast('Nothing new – change your details or a document first', false); return; }
+  const docsGo = msg => items.length ? call('mySubmitAll', [PIN, items], x => { toast((msg ? msg + ' · ' : '') + items.length + ' document(s) sent – the office will check them', true); myDraw(x); }) : null;
+  if (chg) call('mySave', [PIN, det], x => { if (items.length) docsGo('Details saved'); else { toast('Your details are saved', true); myDraw(x); } });
+  else docsGo('');
+}
+/** Own profile photo – shrunk so it stays small. */
+function myPhoto(inp){
+  const f = inp.files && inp.files[0]; if (!f) return;
+  const img = new Image(), url = URL.createObjectURL(f);
+  img.onload = () => {
+    URL.revokeObjectURL(url); let w = 480, q = 0.7, out = '';
+    for (let k = 0; k < 8; k++) { const c = document.createElement('canvas'), sc = Math.min(1, w / img.width);
+      c.width = Math.round(img.width * sc); c.height = Math.round(img.height * sc); c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      out = c.toDataURL('image/jpeg', q); if (out.length < 46000) break; if (q > 0.45) q -= 0.1; else w = Math.round(w * 0.8); }
+    if (out.length >= 46000) { toast('Photo too large – try again', false); return; }
+    window._myPh = out; $('myPhI').src = out; $('myPhI').style.display = ''; toast('Photo ready – press Save / send all', true);
+  };
+  img.onerror = () => toast('Could not read the photo', false); img.src = url;
 }
 function fileShow(r){
   const b = atob(r.data.split(',')[1]), u8 = new Uint8Array(b.length); for (let i = 0; i < b.length; i++) u8[i] = b.charCodeAt(i);

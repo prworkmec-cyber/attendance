@@ -401,7 +401,7 @@ let LAST = Date.now();
 function sesSave(){ try { localStorage.setItem('wmS', JSON.stringify({ t: LAST, k: TOK })); } catch (e) {} }   // only the session token is kept on the phone, never the PIN
 function sesClear(){ try { localStorage.removeItem('wmS'); } catch (e) {} }
 function logout(msg){
-  if (/^T:/.test(PIN)) try { fetch(API, { method: 'POST', keepalive: true, headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ fn: 'logoutMe', args: [PIN], dev: DEV }) }); } catch (e) {}
+  if (/^T:/.test(PIN) && !qGet().length) try { fetch(API, { method: 'POST', keepalive: true, headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ fn: 'logoutMe', args: [PIN], dev: DEV }) }); } catch (e) {}
   sesClear(); PIN = ''; TOK = '';
   try { if (msg) sessionStorage.setItem('wmMsg', msg); } catch (e) {}
   location.reload();
@@ -687,7 +687,7 @@ function tkCancel(k){
 }
 
 function render(d){
-  OFFSET = d.now - Date.now(); tick(); EXEC_URL = d.url || EXEC_URL;
+  window._D = d; OFFSET = d.now - Date.now(); tick(); EXEC_URL = d.url || EXEC_URL;
   srqDraw(d.reqs || []);
   $('hdr').textContent = 'Welcome ' + d.name + ' · ' + d.shift + ' shift';
   const o = $('open');
@@ -848,7 +848,7 @@ function bulk(fn){
     render(r.roster);
     toast(r.ok + ' worker(s) ' + (fn === 'checkIn' ? 'checked in' : 'checked out') +
       (r.errors.length ? ' · NOT done: ' + r.errors.join(' | ') : ''), !r.errors.length);
-  }, undefined, () => qAdd({ fn: fn + 'Many', args: [PIN, names, loc].concat(ex(f)), label: names.length + ' worker(s)' + (fn === 'checkIn' ? ' check-in ' : ' check-out ') + qHH(loc.at) }));
+  }, undefined, () => qAdd({ fn: fn + 'Many', args: [PIN, names, loc].concat(ex(f)), label: names.length + ' worker(s) ' + (fn === 'checkIn' ? 'checked in' : 'checked out') }));
   getLoc(loc => {
     if (fn === 'checkIn') { ask(inMsg(names, ''), () => go(loc)); return; }
     call('checkOutPreview', [PIN, names[0], names], p => ask(outMsg(p, names), f => go(loc, f)), undefined, () => qOut(names, loc, true));
@@ -859,7 +859,7 @@ function act(fn, i){
   const w = window._list[i];
   const ex = f => f ? [f.reason || '', f.note || '', f.brk || ''] : [];
   const go = (loc, f) => call(fn, [PIN, w.name, false, loc].concat(ex(f)), d => { render(d); toast(w.name + (fn === 'checkIn' ? ' checked in' : ' checked out'), true); }, undefined,
-    () => qAdd({ fn: fn, args: [PIN, w.name, true, loc].concat(ex(f)), label: w.name + (fn === 'checkIn' ? ' check-in ' : ' check-out ') + qHH(loc.at) }));
+    () => qAdd({ fn: fn, args: [PIN, w.name, true, loc].concat(ex(f)), label: w.name + (fn === 'checkIn' ? ' checked in' : ' checked out') }));
   getLoc(loc => {
     if (fn === 'checkIn') { ask(inMsg([w.name], w.leave ? w.leave.code : w.status && w.status !== 'P' ? w.status : ''), () => go(loc)); return; }
     call('checkOutPreview', [PIN, w.name, [w.name]], p => ask(outMsg(p, [w.name]), f => go(loc, f)), undefined, () => qOut([w.name], loc, false));
@@ -1139,57 +1139,46 @@ function pg(p){
 const qGet = k => { try { return JSON.parse(localStorage.getItem(k || 'wmQ') || '[]'); } catch (e) { return []; } };
 const qSet = (v, k) => { try { localStorage.setItem(k || 'wmQ', JSON.stringify(v)); } catch (e) {} };
 const qHH = at => new Date(at || Date.now()).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+/* No internet: the punch is shown as done at once and kept on the phone; it is sent by itself when the internet is back –
+   even after the supervisor is logged out. Nothing for the supervisor to do. A punch the server refuses (e.g. outside the
+   company) goes to the admins, not back to the supervisor. */
 function qAdd(it){
-  const q = qGet(); q.push(it); qSet(q); qBar();
-  toast('📶 No internet – saved on this phone: ' + it.label + '. It is sent automatically when the internet is back.', true);
+  it.tok = PIN; const q = qGet(); q.push(it); qSet(q);
+  qLocal(it); toast('✅ ' + it.label, true);
+}
+function qLocal(it){   // show the punch on the screen straight away
+  const d = window._D; if (!d || !d.list) return;
+  const many = /Many$/.test(it.fn), names = many ? it.args[1] : [it.args[1]], loc = it.args[many ? 2 : 3], t = qHH(loc && loc.at);
+  d.list.forEach(w => { if (names.indexOf(w.name) < 0) return; if (/^checkIn/.test(it.fn)) { w.inT = t; w.status = 'P'; } else w.outT = t; });
+  d.now = Date.now() + OFFSET; render(d);
 }
 function qOut(names, loc, many){
-  ask({ title: '📶 No internet', names: names, yes: 'Save check-out',
-        en: 'Save the check-out at ' + qHH(loc.at) + ' on this phone? It is sent automatically when the internet is back.\nIf the shift was not complete (or it is Sunday), you will be asked for the reason then.' },
-    () => qAdd({ fn: many ? 'checkOutMany' : 'checkOut', args: many ? [PIN, names, loc] : [PIN, names[0], true, loc], label: (many ? names.length + ' worker(s)' : names[0]) + ' check-out ' + qHH(loc.at) }));
+  ask({ title: 'Check out', names: names, yes: 'Check out', en: 'Check out at ' + qHH(loc.at) + '?' },
+    () => qAdd({ fn: many ? 'checkOutMany' : 'checkOut', args: many ? [PIN, names, loc] : [PIN, names[0], true, loc], label: (many ? names.length + ' worker(s)' : names[0]) + ' checked out' }));
 }
-const qDone = msg => /already checked (out|in)/i.test(String(msg || ''));   // the punch is already in the record = nothing to finish
-function qFail(it, msg){
-  if (qDone(msg)) return;
-  const many = /Many$/.test(it.fn), names = many ? it.args[1] : [it.args[1]], loc = it.args[many ? 2 : 3];
-  const name = names.find(n => msg.indexOf(n) === 0) || names[0];
-  if (/^checkOut/.test(it.fn)) { const f = qGet('wmQf'); f.push({ name: name, loc: loc, msg: msg }); qSet(f, 'wmQf'); }
-  else toast('Not saved: ' + name + ' – ' + msg, false);
-}
+const qDone = msg => /already checked (out|in)/i.test(String(msg || ''));
+function qFail(){}   // refused punches are reported to the admins by the server
 let QBUSY = false;
 async function qSync(){
-  if (QBUSY || !/^T:/.test(PIN) || window._role !== 'SUP') return;
-  let q = qGet(); if (!q.length) { qBar(); return; }
+  if (QBUSY) return;
+  const old = qGet('wmQf');   // "not saved" items left by the older app version: sent once more, quietly
+  if (old.length) { const q0 = qGet(); old.filter(x => !qDone(x.msg)).forEach(x => q0.push({ fn: 'checkOut', args: ['', x.name, true, x.loc], tok: '', label: x.name })); qSet(q0); qSet([], 'wmQf'); }
+  let q = qGet(); if (!q.length) return;
   QBUSY = true; let sent = 0;
   try {
     while (q.length) {
-      const it = q[0], args = it.args.slice(); args[0] = PIN;
-      let r; try { r = await fetch(API, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ fn: it.fn, args: args, tok: TOK, dev: DEV }) }).then(x => x.json()); } catch (e) { break; }
-      if (!r.ok && /^SESSION_(ENDED|IDLE)$/.test(r.error)) break;
+      const it = q[0], args = it.args.slice(), pin = /^T:/.test(PIN) && window._role === 'SUP' ? PIN : (it.tok || '');
+      if (!pin) break;   // waits for the next login
+      args[0] = pin;
+      let r; try { r = await fetch(API, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ fn: it.fn, args: args, tok: TOK, dev: DEV, q: 1 }) }).then(x => x.json()); } catch (e) { break; }
+      if (!r.ok && /^SESSION_(ENDED|IDLE)$/.test(r.error)) { if (pin === PIN) break; it.tok = ''; qSet(q); break; }   // old login ended: sent after the next login
       q.shift(); qSet(q); sent++;
-      if (r.ok) { if (/Many$/.test(it.fn) && r.data && r.data.errors) r.data.errors.forEach(m => qFail(it, m)); }
-      else qFail(it, r.error);
     }
-  } finally { QBUSY = false; qBar(); if (sent) { toast('📶 Internet back – ' + sent + ' saved punch(es) sent', true); refresh(); } }
+  } finally { QBUSY = false; qBar(); if (sent && window._role === 'SUP' && /^T:/.test(PIN)) refresh(); }
 }
-function qBar(){
-  const q = qGet(), b = $('qbar'); if (!b) return;
-  let f = qGet('wmQf'); const f2 = f.filter(x => !qDone(x.msg)); if (f2.length !== f.length) { f = f2; qSet(f, 'wmQf'); }   // clear old "already checked out" items
-  if (!q.length && !f.length) { b.classList.add('hidden'); return; }
-  b.innerHTML = (q.length ? '<b>📶 ' + q.length + ' punch(es) saved on this phone</b> – waiting for internet: ' + q.map(x => esc(x.label)).join(', ') + ' <button class="grey sm" onclick="qSync()">Send now</button>' : '') +
-    f.map((x, k) => '<div style="margin-top:6px">⚠ <b>' + esc(x.name) + '</b> check-out ' + qHH(x.loc && x.loc.at) + ' not saved: ' + esc(x.msg) +
-      ' <button class="pri sm" onclick="qFin(' + k + ')">Finish</button> <button class="grey sm" onclick="qDrop(' + k + ')">Remove</button></div>').join('');
-  b.classList.remove('hidden');
-}
-function qFin(k){
-  const x = qGet('wmQf')[k];
-  ask({ title: 'Finish check-out – ' + x.name, names: [x.name], yes: 'Send', form: /reason/i.test(x.msg), brk: /lunch break/i.test(x.msg),
-        en: x.msg + '\nThe time saved on the phone (' + qHH(x.loc && x.loc.at) + ') is used.' },
-    f => call('checkOut', [PIN, x.name, true, x.loc, (f && f.reason) || '', (f && f.note) || '', (f && f.brk) || ''], () => { qDrop(k, true); toast(x.name + ' checked out', true); refresh(); },
-      e => { const l = qGet('wmQf'); if (l[k]) { l[k].msg = e; qSet(l, 'wmQf'); } qBar(); toast(e, false); }));
-}
-function qDrop(k, quiet){ const l = qGet('wmQf'); l.splice(k, 1); qSet(l, 'wmQf'); qBar(); if (!quiet) toast('Removed', true); }
+function qBar(){ const b = $('qbar'); if (b) b.classList.add('hidden'); }
 window.addEventListener('online', () => setTimeout(qSync, 1500));
+setTimeout(qSync, 3000);
 setInterval(() => { if (navigator.onLine) qSync(); }, 30000);
 /* ---- 👤 WORKER APP: own month, view only + leave requests ---- */
 const RQ_T = { AV: 'Annual vacation', EL: 'Emergency leave', PL: 'Personal leave (unpaid)', SL: 'Sick leave' };

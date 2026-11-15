@@ -311,13 +311,13 @@ button.wait{opacity:.5;filter:grayscale(1);cursor:progress;pointer-events:none}
     <select id="mReason" style="width:100%;margin:6px 0"><option value="">— Reason</option><option value="CO">Sent by company (paid in full)</option><option value="SL">Sick (admin approves)</option><option value="PL">Personal (unpaid hours)</option><option value="OTHER">Other (admin decides)</option></select>
     <textarea id="mNote" rows="2" maxlength="300" placeholder="Note / more details" style="width:100%;font-size:15px;padding:8px;border-radius:8px;border:1px solid var(--line);font-family:inherit;margin-bottom:6px"></textarea>
   </div>
-  <div id="mVac" style="display:none;margin:8px 0"><b>Vacation starts on</b><br><input id="mVacFrom" type="date" style="width:100%;margin-top:6px"></div>
+  <div id="mVac" style="display:none;margin:8px 0"><b>Vacation starts on</b><br><input id="mVacFrom" type="date" oninput="daysHint()" style="width:100%;margin-top:6px"></div>
   <div id="mPen" style="display:none;margin:8px 0"><b>Hours to deduct (from basic hours)</b><br>
     <select id="mPenH" style="width:100%;margin-top:6px"><option value="0.5">30 minutes</option><option value="1" selected>1 hour</option><option value="1.5">1½ hours</option><option value="2">2 hours</option><option value="3">3 hours</option><option value="4">4 hours</option></select>
   </div>
   <div id="mTxtD" style="display:none;margin:8px 0"><textarea id="mTxt" rows="3" maxlength="300" style="width:100%;font-size:15px;padding:8px;border-radius:8px;border:1px solid var(--line);font-family:inherit"></textarea></div>
-  <div id="mDays" style="display:none;margin:8px 0"><b>How many days?</b><br>
-    <input id="mDaysIn" type="number" min="1" max="365" inputmode="numeric" placeholder="Number of days" style="width:100%;margin-top:6px">
+  <div id="mDays" style="display:none;margin:8px 0"><b>Last day of leave</b> <span class="hint">(he is back on duty the next day)</span><br>
+    <input id="mDaysIn" type="date" oninput="daysHint()" style="width:100%;margin-top:6px"><div id="mDaysH" class="hint" style="margin-top:4px"></div>
     <div id="mLs" style="display:none;margin-top:10px">
       <label style="display:flex;align-items:center;gap:8px;font-weight:bold"><input type="checkbox" id="mLsChk" class="chk" onchange="$('mLsAmt').style.display = this.checked ? '' : 'none'"> Leave salary paid</label>
       <input id="mLsAmt" type="number" min="1" step="any" inputmode="decimal" placeholder="Leave salary amount (AED)" style="width:100%;margin-top:6px;display:none">
@@ -745,6 +745,13 @@ const LEAVE_OPTS = ['SL', 'EL', 'AV', 'WL', 'PL', 'L'].filter(k => LEAVE[k]).map
 LEAVE.EO = 'Early check-out';   // approvals only – not in the dropdown
 
 /* ---- in-page confirmation (replaces browser pop-ups) ---- */
+/* leave length: first day (start date, or today) to the last day the operator picks – both days count */
+const dStart = () => ($('mVac').style.display !== 'none' && $('mVacFrom').value) || window._date || dubaiNow().toISOString().slice(0, 10);
+function daysN(){ const u = $('mDaysIn').value; return u ? Math.round((new Date(u + 'T12:00:00Z') - new Date(dStart() + 'T12:00:00Z')) / 864e5) + 1 : 0; }
+function daysHint(){
+  const n = daysN(), u = $('mDaysIn').value;
+  $('mDaysH').textContent = !u ? '' : n < 1 ? 'The last day is before the first day' : n + ' day' + (n === 1 ? '' : 's') + ' (' + niceD(dStart()) + ' – ' + niceD(u) + ') · back on duty ' + niceD(new Date(new Date(u + 'T12:00:00Z').getTime() + 864e5).toISOString().slice(0, 10));
+}
 function ask(o, onYes, onNo){
   $('mTitle').textContent = o.title; $('mTitle').className = o.warn ? 'warnh' : '';
   $('mEn').innerHTML = esc(o.en).replace(/\n/g, '<br>');
@@ -753,7 +760,7 @@ function ask(o, onYes, onNo){
   if (o.form) { $('mReason').value = ''; $('mNote').value = ''; }
   $('mVac').style.display = o.vac ? '' : 'none'; if (o.vac) $('mVacFrom').value = o.vac;
   $('mTxtD').style.display = o.txt ? '' : 'none'; $('mTxt').value = ''; $('mTxt').placeholder = o.txt || '';
-  $('mDays').style.display = o.days ? '' : 'none'; $('mDaysIn').value = '';
+  $('mDays').style.display = o.days ? '' : 'none'; $('mDaysIn').value = ''; $('mDaysH').textContent = '';
   $('mLs').style.display = o.ls ? '' : 'none'; $('mLsChk').checked = false; $('mLsAmt').value = ''; $('mLsAmt').style.display = 'none';
   $('mAdv').style.display = o.adv ? '' : 'none'; if (o.adv) { $('mAdvDate').value = o.adv; $('mAdvAmt').value = ''; $('mAdvNote').value = ''; }
   $('mPen').style.display = o.pen ? '' : 'none'; $('mPenH').value = '1';
@@ -785,8 +792,9 @@ function ask(o, onYes, onNo){
       f = Object.assign(f || {}, { from: $('mVacFrom').value });
     }
     if (o.days) {
-      const n = Math.floor(Number($('mDaysIn').value));
-      if (!(n >= 1 && n <= 365)) { toast('Enter the number of days', false); return; }
+      const n = daysN();
+      if (!$('mDaysIn').value) { toast('Pick the last day of the leave', false); return; }
+      if (!(n >= 1 && n <= 365)) { toast('The last day must be on or after the first day (max 365 days)', false); return; }
       f = Object.assign(f || {}, { days: n });
     }
     if (o.ls) {

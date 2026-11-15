@@ -464,7 +464,7 @@ function logout(msg){
   try { if (msg) sessionStorage.setItem('wmMsg', msg); } catch (e) {}
   location.reload();
 }
-function idleCheck(){ if (PIN && Date.now() - LAST > IDLE_MS) logout('Logged out – no activity for 10 minutes'); }
+function idleCheck(){}   // Haroon 15 Nov: stay logged in (no 10-minute logout) – ends only with Log out
 ['pointerdown', 'keydown', 'touchstart'].forEach(ev => document.addEventListener(ev, () => {
   if (!PIN) return; idleCheck(); if (!PIN) return;
   const n = Date.now(); if (n - LAST > 5000) { LAST = n; sesSave(); }

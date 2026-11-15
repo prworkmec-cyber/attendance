@@ -106,6 +106,7 @@
   .grey{background:#6B7280}
   .hint{font-size:13px;color:var(--muted);margin:4px 0 8px}
   #adm label{font-size:13px;color:var(--muted)}
+button.wait{opacity:.5;filter:grayscale(1);cursor:progress;pointer-events:none}
 </style>
 </head>
 <body>
@@ -424,6 +425,41 @@ function doLogin(auto){
   }, e => { PIN = ''; $('login').classList.remove('hidden'); $('hdr').textContent = 'Enter your password'; if (auto) { sesClear(); $('pin').value = ''; } toast(e, false); });
 }
 $('pin').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+/* ---- a pressed button stays grey until its work is finished (no double taps) ---- */
+document.addEventListener('click', e => {
+  const b = e.target && e.target.closest ? e.target.closest('button') : null; if (!b || b.disabled) return;
+  const t0 = Date.now();
+  setTimeout(() => {   // after the button's own action has started
+    if (!b.isConnected) return;
+    b.disabled = true; b.classList.add('wait');
+    const chk = () => {
+      const t = Date.now() - t0;
+      if (b.isConnected && (t < 600 || ((BUSY > 0 || LOCB > 0) && t < 30000))) { setTimeout(chk, 250); return; }
+      b.disabled = false; b.classList.remove('wait');
+    };
+    setTimeout(chk, 250);
+  }, 0);
+});
+/* ---- 🔄 new app version: loaded by itself when nobody is using the app (no tap for 1 minute, nothing being saved) ---- */
+let VER0 = '', UPD = false, TAPT = Date.now();
+['pointerdown', 'keydown', 'touchstart'].forEach(ev => document.addEventListener(ev, () => { TAPT = Date.now(); }, true));
+function verOf(){
+  return fetch('index.html?v=' + Date.now(), { cache: 'no-store' }).then(r => r.ok ? r.text() : '').then(t => {
+    if (!t) return ''; let x = 5381; for (let i = 0; i < t.length; i++) x = ((x * 33) ^ t.charCodeAt(i)) >>> 0; return String(x); }).catch(() => '');
+}
+function updTry(){
+  const a = document.activeElement, typing = a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName);
+  const modal = $('modal') && getComputedStyle($('modal')).display !== 'none';
+  if (BUSY > 0 || LOCB > 0 || (typeof QBUSY !== 'undefined' && QBUSY) || typing || modal || Date.now() - TAPT < 60000) return;   // busy – try again later
+  try { sessionStorage.setItem('wmMsg', '✅ App updated'); } catch (e) {}
+  location.reload();
+}
+function updCheck(){
+  if (UPD) { updTry(); return; }
+  verOf().then(v => { if (!v) return; if (!VER0) VER0 = v; else if (v !== VER0) { UPD = true; updTry(); } });
+}
+setTimeout(updCheck, 4000); setInterval(updCheck, 60000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) updCheck(); });
 (function resume(){
   let s = null, m = '';
   try { s = JSON.parse(localStorage.getItem('wmS') || 'null'); m = sessionStorage.getItem('wmMsg') || ''; sessionStorage.removeItem('wmMsg'); } catch (e) {}
@@ -934,12 +970,14 @@ function abs(i, sel){
 
 /* ---- location (punch only inside WORKMEC FZE) ---- */
 let EXEC_URL = '';
+let LOCB = 0;   // waiting for GPS (keeps the pressed button grey)
 function getLoc(ok, silent){
   if (!navigator.geolocation) { if (!silent) locFail({ code: 0 }); return; }
   if (!silent) toast('Getting location…', true);
+  LOCB++;
   navigator.geolocation.getCurrentPosition(
-    p => ok({ lat: p.coords.latitude, lng: p.coords.longitude, acc: Math.round(p.coords.accuracy), at: Date.now() + OFFSET }),   // at = tap time, kept if sent later (no internet)
-    e => { if (!silent) locFail(e); },
+    p => { LOCB = Math.max(0, LOCB - 1); ok({ lat: p.coords.latitude, lng: p.coords.longitude, acc: Math.round(p.coords.accuracy), at: Date.now() + OFFSET }); },   // at = tap time, kept if sent later (no internet)
+    e => { LOCB = Math.max(0, LOCB - 1); if (!silent) locFail(e); },
     { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 });
 }
 function locFail(e){

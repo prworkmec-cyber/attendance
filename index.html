@@ -1577,7 +1577,7 @@ function prDraw(){
     r.soon.map(x => '<div style="padding:4px 0;border-bottom:1px solid var(--line)">⚠ <b>' + av(x.name) + esc(x.name) + '</b> – ' + esc(x.doc) + (x.no ? ' <span class="hint">' + esc(x.no) + '</span>' : '') + ' · ' + esc(niceDY(x.exp)) + ' · ' + tag(x) + '</div>').join('');
   $('prL').innerHTML = ['Worker', 'Management'].map(g => '<div style="margin-top:8px"><b>' + (g === 'Worker' ? '👷 Workers' : '🧑‍💼 Management') + '</b></div>' +
     r.people.filter(p => p.group === g).map(p => '<div class="row" style="padding:5px 0;border-bottom:1px solid var(--line);align-items:center"><span style="flex:1">' + av(p.name) + esc(p.name) +
-      ' <span class="hint">' + (p.join ? 'joined ' + esc(niceDY(p.join)) : 'joining date –') + ' · documents ' + p.filled + '/4 · ' + (p.email ? '✉' : '<b class="due">no email</b>') + '</span></span><button class="grey sm" onclick="prOpen(\'' + esc(p.name).replace(/'/g, "\\'") + '\')">👤 Profile</button></div>').join('')).join('');
+      ' <span class="hint">' + (p.join ? 'joined ' + esc(niceDY(p.join)) : 'joining date –') + ' · documents ' + p.filled + '/4 · ' + (p.email ? '✉' : '<b class="due">no email</b>') + '</span></span><button class="grey sm" onclick="wDocs(\'' + esc(p.name).replace(/'/g, "\\'") + '\')">📄 Docs</button> <button class="grey sm" onclick="prOpen(\'' + esc(p.name).replace(/'/g, "\\'") + '\')">👤 Profile</button></div>').join('')).join('');
 }
 const prF = (id, lbl, v, type) => '<label style="display:block;margin-top:6px">' + lbl + '<input id="' + id + '" type="' + (type || 'text') + '" value="' + esc(v || '') + '" style="width:100%"></label>';
 function prOpen(name){
@@ -1663,7 +1663,16 @@ function prPhoto(inp){
 function wpDraw(){
   const el = $('wpL'); if (!el) return;
   const rows = (window._staff || []).filter(r => r.active);
-  el.innerHTML = !rows.length ? '<div class="hint">Loading…</div>' : rows.map(r => '<div class="row" style="padding:4px 0;border-bottom:1px solid var(--line);align-items:center"><span style="flex:1">' + av(r.name) + esc(r.name) + ' <span class="hint">' + esc(r.shift) + '</span></span><button class="grey sm" onclick="wPin(' + window._staff.indexOf(r) + ')">' + (r.hasPin ? '🔑 PIN ✓' : '🔑 Set PIN') + '</button></div>').join('');
+  el.innerHTML = !rows.length ? '<div class="hint">Loading…</div>' : rows.map(r => '<div class="row" style="padding:4px 0;border-bottom:1px solid var(--line);align-items:center"><span style="flex:1">' + av(r.name) + esc(r.name) + ' <span class="hint">' + esc(r.shift) + '</span></span><button class="grey sm" onclick="wDocs(\'' + esc(r.name).replace(/'/g, "\\'") + '\')">📄 Docs</button> ' + (r.hasPin ? '<button class="grey sm" onclick="lgPh(\'W:' + esc(r.name).replace(/'/g, "\\'") + '\', \'' + esc(r.name).replace(/'/g, "\\'") + '\', false)">📱 Reset phone</button> ' : '') + '<button class="grey sm" onclick="wPin(' + window._staff.indexOf(r) + ')">' + (r.hasPin ? '🔑 PIN ✓' : '🔑 Set PIN') + '</button></div>').join('');
+}
+/** 📄 All saved document copies of one person – tap to view (Haroon 16 Nov). */
+function wDocs(name){
+  call('profGet', [PIN, name], d => {
+    window._pd = d; const f = d.files || [];
+    ask({ title: '📄 Documents – ' + name, names: [name], noYes: true,
+          en: f.length ? f.length + ' copy(ies) saved. Tap 👁 View to open.' : 'No document copies saved yet. Upload them in Staff → 👤 Profile.',
+          html: f.map(x => '<div class="row" style="padding:6px 0;border-top:1px solid var(--line);align-items:center"><span style="flex:1"><b>' + esc(x.doc) + '</b><div class="hint">' + esc(x.name) + ' · ' + esc(niceDY(x.at)) + '</div></span><button class="grey sm" onclick="prDocOpen(\'' + x.id + '\')">👁 View</button></div>').join('') });
+  });
 }
 function wPin(i){
   const r = window._staff[i];

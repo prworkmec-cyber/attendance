@@ -80,6 +80,7 @@
   .tabs{display:flex;flex-wrap:wrap;gap:6px;position:sticky;top:0;z-index:5;background:var(--bg);padding:8px 0;margin-bottom:4px}
   .tabs button{flex:1 1 30%;background:#E5E7EB;color:#1F2937;padding:10px 6px;font-size:14px}
   .sm{font-size:14px !important;padding:8px 9px !important}
+  .xs{font-size:12px !important;padding:4px 8px !important;min-height:0 !important}
   .warnb{background:#FFF3CD;color:#8A5A00;border:1px solid #E0B252;border-radius:14px;padding:3px 9px;font-size:13px;font-weight:bold;margin-left:4px} .warnb.hot{background:#C62828;color:#fff;border-color:#C62828}
   .apb{background:#C62828;color:#fff;border-radius:10px;padding:0 7px;font-size:12px;margin-left:4px} .apb:empty{display:none}
   .lvp{display:none;width:100%;gap:6px;margin-top:6px} .lvp.open{display:flex} .lvp button{flex:1}
@@ -371,10 +372,9 @@ button.wait{opacity:.5;filter:grayscale(1);cursor:progress;pointer-events:none}
     </div>
     <div class="card" data-pg="staff">
       <b>👤 Staff details</b>
-      <div class="hint">Photo, joining date, contacts, passport, Emirates ID, insurance and any extra detail. Expiry dates are emailed to management 30 and 15 days before.</div>
-      <div id="prL">Loading…</div>
+      <div class="hint">Tap a name to open his profile: photo, joining date, contacts, payslip details (full name, EID, designation), passport, Emirates ID, insurance and document copies. Expiry dates are emailed to management 30 and 15 days before.</div>
+      <table id="staff" style="margin-top:6px"></table>
     </div>
-    <div class="card" data-pg="staff"><table id="staff"></table></div>
   </div>
 </main>
 <div id="msg"></div>
@@ -1575,17 +1575,19 @@ function prDraw(){
   const tag = x => x.days < 0 ? '<b class="due">EXPIRED ' + (-x.days) + ' d ago</b>' : x.days <= 15 ? '<b class="due">' + x.days + ' days left</b>' : '<b style="color:#B26A00">' + x.days + ' days left</b>';
   $('prSoon').innerHTML = !r.soon.length ? '<div class="hint">No document expires in the next 30 days 👍</div>' :
     r.soon.map(x => '<div style="padding:4px 0;border-bottom:1px solid var(--line)">⚠ <b>' + av(x.name) + esc(x.name) + '</b> – ' + esc(x.doc) + (x.no ? ' <span class="hint">' + esc(x.no) + '</span>' : '') + ' · ' + esc(niceDY(x.exp)) + ' · ' + tag(x) + '</div>').join('');
-  $('prL').innerHTML = ['Worker', 'Management'].map(g => '<div style="margin-top:8px"><b>' + (g === 'Worker' ? '👷 Workers' : '🧑‍💼 Management') + '</b></div>' +
-    r.people.filter(p => p.group === g).map(p => '<div class="row" style="padding:5px 0;border-bottom:1px solid var(--line);align-items:center"><span style="flex:1">' + av(p.name) + esc(p.name) +
-      ' <span class="hint">' + (p.join ? 'joined ' + esc(niceDY(p.join)) : 'joining date –') + ' · documents ' + p.filled + '/4 · ' + (p.email ? '✉' : '<b class="due">no email</b>') + '</span></span><button class="grey sm" onclick="wDocs(\'' + esc(p.name).replace(/'/g, "\\'") + '\')">📄 Docs</button> <button class="grey sm" onclick="prOpen(\'' + esc(p.name).replace(/'/g, "\\'") + '\')">👤 Profile</button></div>').join('')).join('');
+  if (window._staff) drawStaff(window._staff);   // profile info shows in the one Staff details table
 }
 const prF = (id, lbl, v, type) => '<label style="display:block;margin-top:6px">' + lbl + '<input id="' + id + '" type="' + (type || 'text') + '" value="' + esc(v || '') + '" style="width:100%"></label>';
 function prOpen(name){
-  call('profGet', [PIN, name], d => {
+  const st = (window._staff || []).find(r => r.name === name && r.tabOk);   // payslip details (old "Edit") are in the profile now
+  call('profGet', [PIN, name], d => { if (!st) prShow(name, d, null); else call('staffInfo', [PIN, name], x => prShow(name, d, x)); });
+}
+function prShow(name, d, x){
     window._pd = d;
     ask({ title: '👤 ' + name, names: [name], yes: 'Save', en: d.group + ' – documents with an expiry date are emailed to management 30 and 15 days before they expire.',
       html: '<div style="text-align:center;margin:6px 0">' + (d.photoData ? '<img src="' + d.photoData + '" style="max-width:140px;max-height:160px;border-radius:8px">' : '<div class="hint">No photo</div>') +
           '<br><label class="grey" style="display:inline-block;margin-top:6px;padding:8px 12px;border-radius:8px;background:#6B7280;color:#fff;cursor:pointer">📷 ' + (d.photoData ? 'Change photo' : 'Add photo') + '<input type="file" accept="image/*" style="display:none" onchange="prPhoto(this)"></label></div>' +
+        (x ? '<div style="border-top:1px solid var(--line);margin-top:8px;padding-top:4px"><b>Payslip details</b> <span class="hint">(payslip and Salary Statement)</span>' + prF('pfFull', 'Full name (as on payslip)', x.full) + prF('pfId', 'EID or passport No.', x.id) + prF('pfDesig', 'Designation', x.desig) + '</div>' : '') +
         prF('pfJoin', 'Joining date', d.join, 'date') + prF('pfEmail', 'Email', d.email, 'email') + prF('pfMob', 'Mobile (UAE)', d.mobile, 'tel') + prF('pfHome', 'Home country contact (name / phone)', d.home) +
         [['Passport', 'pfPpNo', 'pfPpExp', d.ppNo, d.ppExp], ['Emirates ID', 'pfEidNo', 'pfEidExp', d.eidNo, d.eidExp], ['Visa', 'pfVisaNo', 'pfVisaExp', d.visaNo, d.visaExp], ['Insurance', 'pfInsNo', 'pfInsExp', d.insNo, d.insExp]].map(x =>
           '<div style="border-top:1px solid var(--line);margin-top:8px;padding-top:4px"><div class="row"><span style="flex:1">' + prF(x[1], x[0] + ' No.', x[3]) + '</span><span style="flex:1">' + prF(x[2], x[0] + ' expiry', x[4], 'date') + '</span></div>' + prUpBtn(x[0]) + '</div>').join('') +
@@ -1595,11 +1597,12 @@ function prOpen(name){
         const g = id => $(id).value.trim();
         const more = [...document.querySelectorAll('#pfMore .pfm')].map(x => ({ label: x.querySelector('.l').value.trim(), no: x.querySelector('.n').value.trim(), exp: x.querySelector('.e').value }));
         if (more.some(m => !m.label && (m.no || m.exp))) { toast('Give each extra detail a name', false); return; }
+        const pay = x ? [g('pfFull'), g('pfId'), g('pfDesig')] : null;
+        if (pay && pay.join('|') !== [x.full, x.id, x.desig].join('|')) call('editStaff', [PIN, name].concat(pay), () => toast(name + ': payslip details saved', true));
         call('profSave', [PIN, name, { join: $('pfJoin').value, email: g('pfEmail'), mobile: g('pfMob'), home: g('pfHome'), ppNo: g('pfPpNo'), ppExp: $('pfPpExp').value, visaNo: g('pfVisaNo'), visaExp: $('pfVisaExp').value,
           eidNo: g('pfEidNo'), eidExp: $('pfEidExp').value, insNo: g('pfInsNo'), insExp: $('pfInsExp').value, more: more.filter(m => m.label) }], () => { toast(name + ': details saved', true); prLoad(); });
       });
     (d.more || []).forEach(m => prMoreAdd(m));
-  });
 }
 /* ---- 📎 document copies (photo or PDF) per document – saved to Drive at once, opened inside the app ---- */
 const docKey = s => String(s || '').replace(/\W+/g, '_');
@@ -2442,15 +2445,23 @@ function grpOpts(rows, txt){
   rows.forEach(r => { if (r.shift !== g) { h += (g ? '</optgroup>' : '') + '<optgroup label="' + esc(r.shift) + ' SHIFT">'; g = r.shift; } h += '<option value="' + esc(r.name) + '">' + esc(txt(r)) + '</option>'; });
   return h + (g ? '</optgroup>' : '');
 }
+/** Under a name in Staff details: joining date · documents · email (from the profiles). */
+function prSub(n){ const p = ((window._prof || {}).people || []).find(x => x.name === n); if (!p) return '';
+  return '<div class="hint">' + (p.join ? 'joined ' + esc(niceDY(p.join)) : 'joining date –') + ' · documents ' + p.filled + '/4 · ' + (p.email ? '✉' : '<b class="due">no email</b>') + '</div>'; }
+/** Management (not on payslips) – same table, below the workers. */
+function prMgmt(){ const l = ((window._prof || {}).people || []).filter(p => p.group === 'Management'); if (!l.length) return '';
+  return '<tr><td colspan="4" style="padding:18px 4px 6px;font-weight:bold;color:var(--blue);border-bottom:2px solid var(--blue)">MANAGEMENT</td></tr>' +
+    l.map(p => '<tr><td colspan="3"><a href="#" style="color:inherit;text-decoration:none" onclick="prOpen(\'' + esc(p.name).replace(/'/g, "\\'") + '\');return false">' + av(p.name) + '<b>' + esc(p.name) + '</b></a>' + prSub(p.name) + '</td>' +
+      '<td><button class="grey xs" onclick="wDocs(\'' + esc(p.name).replace(/'/g, "\\'") + '\')">📄 Docs</button></td></tr>').join(''); }
 function drawStaff(rows){
   rows = bySh(rows);
   $('staff').innerHTML = '<tr><th>Worker</th><th>Shift</th><th>Status</th><th></th></tr>' + rows.map((r, i) =>
     (i === 0 || rows[i - 1].shift !== r.shift ? '<tr><td colspan="4" style="padding:' + (i ? '18px' : '6px') + ' 4px 6px;font-weight:bold;color:var(--blue);border-bottom:2px solid var(--blue)">' + esc(r.shift) + ' SHIFT</td></tr>' : '') +
-    '<tr><td>' + av(r.name) + esc(r.name) + (r.tabOk ? '' : '<br><span class="flag">No payslip</span> <button class="grey sm" onclick="mkSlip(' + i + ')">Create payslip</button>') + '</td>' +
+    '<tr><td><a href="#" style="color:inherit;text-decoration:none" onclick="prOpen(\'' + esc(r.name).replace(/'/g, "\\'") + '\');return false">' + av(r.name) + '<b>' + esc(r.name) + '</b></a>' + prSub(r.name) + (r.tabOk ? '' : '<br><span class="flag">No payslip</span> <button class="grey sm" onclick="mkSlip(' + i + ')">Create payslip</button>') + '</td>' +
     '<td><select onchange="chShift(' + i + ',this)"><option' + (r.shift==='DAY'?' selected':'') + '>DAY</option><option' + (r.shift==='NIGHT'?' selected':'') + '>NIGHT</option></select></td>' +
     '<td>' + (r.active ? 'Active' : '<span class="flag">Removed</span>') + '</td>' +
-    '<td style="white-space:nowrap"><button class="grey sm" onclick="wDocs(\'' + esc(r.name).replace(/'/g, "\\'") + '\')">📄 Docs</button> ' + (r.tabOk ? '<button class="grey sm" onclick="stEdit(' + i + ')">Edit</button> ' : '') + '<button class="' + (r.active ? 'out' : 'in') + '" onclick="tog(' + i + ')">' + (r.active ? 'Remove' : 'Restore') + '</button></td></tr>'
-  ).join('');
+    '<td style="white-space:nowrap"><button class="grey xs" onclick="wDocs(\'' + esc(r.name).replace(/'/g, "\\'") + '\')">📄 Docs</button> <button class="' + (r.active ? 'out' : 'in') + ' xs" onclick="tog(' + i + ')">' + (r.active ? 'Remove' : 'Restore') + '</button></td></tr>'
+  ).join('') + prMgmt();
   window._staff = rows;
   const keep = $('aWorker').value;
   $('aWorker').innerHTML = grpOpts(rows, r => r.name + (r.active ? '' : ' (removed)'));

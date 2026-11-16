@@ -252,6 +252,8 @@ button.wait{opacity:.5;filter:grayscale(1);cursor:progress;pointer-events:none}
       <div id="pnCur" class="hint"></div>
       <input id="pnReason" placeholder="Reason (required)" style="width:100%;margin-top:8px">
       <div class="row" style="margin-top:8px"><button class="out" style="flex:2" onclick="pnSave()">Deduct</button><button class="grey" style="flex:1" onclick="pnDel()">Remove</button></div>
+      <div class="row" style="margin-top:14px"><b style="flex:1">📜 Penalty history – last 2 months</b><button class="grey sm" onclick="pnHist()">⟳</button></div>
+      <div id="pnH" class="hint">Loading…</div>
     </div>
     <div class="card" data-pg="ls">
       <div class="row"><b style="flex:1">✈ Annual vacations</b><select id="vacF" onchange="vacDraw()"><option value="">Everyone</option><option value="ON">On vacation</option><option value="BOOKED">Booked</option><option value="DUE">Eligible now</option><option value="WAIT">Not yet eligible</option><option value="NODATE">Joining date missing</option></select></div>
@@ -460,8 +462,8 @@ function tick(){
     ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getUTCMonth()] + ' ' + d.getUTCFullYear();
 }
 setInterval(tick, 1000); tick();
-const RO_FN = /^(serverNow|login|getRoster|list|get|notifications|notifOld|photoMap|pushKey|myDocs|myDocGet|profList|profGet|profDocGet|coList|coFileGet|proList|proFeeFile|vacList|dashData|hrMonth|hrSlip|hrMgSlip|adminLive|adminGet|leaveStats|staffInfo|workerView|docReqList|docReqFile|checkOutPreview|tgCheck)/;
-const SLOW_FN = /^(warnEvidence|mySubmit|mySubmitAll|mySave|profDoc|profPhoto|coFile|proFee|addLeaveDoc|updateSlipsNow|closeMonthNow|preCloseNow|hrMonth|dashData|createSlip|signLsReceipt|addWarning|signWarning|signReq|lsToSup|setLeaveSalary|addPenalty|addPenaltyDays|hr\w+)$/;
+const RO_FN = /^(serverNow|penHistory|login|getRoster|list|get|notifications|notifOld|photoMap|pushKey|myDocs|myDocGet|profList|profGet|profDocGet|coList|coFileGet|proList|proFeeFile|vacList|dashData|hrMonth|hrSlip|hrMgSlip|adminLive|adminGet|leaveStats|staffInfo|workerView|docReqList|docReqFile|checkOutPreview|tgCheck)/;
+const SLOW_FN = /^(warnEvidence|mySubmit|mySubmitAll|mySave|profDoc|profPhoto|coFile|proFee|addLeaveDoc|updateSlipsNow|closeMonthNow|preCloseNow|hrMonth|dashData|createSlip|signLsReceipt|addWarning|signWarning|signReq|lsToSup|penSigAdd|penDelDays|setLeaveSalary|addPenalty|addPenaltyDays|hr\w+)$/;
 let INFLIGHT = 0; const WAITQ = [];
 call('serverNow', [], t => { OFFSET = t - Date.now(); tick(); });
 
@@ -1839,6 +1841,7 @@ function attMode(m){ ATT = ATT === m ? '' : m; attShow(); }
 function attShow(){
   if (ATT === 'warn') wnLoad();
   if (ATT === 'pen' && !$('pnDate').value) $('pnDate').value = dubaiNow().toISOString().slice(0, 10);
+  if (ATT === 'pen') pnHist();
   [['one', 'attOne', 'swOne', 'One worker'], ['bulk', 'attBulk', 'swBulk', 'Whole shift (bulk)'], ['pen', 'attPen', 'swPen', 'Penalty'], ['warn', 'attWarn', 'swWarn', 'Warnings']].forEach(([m, card, btn, txt]) => {
     $(card).style.display = ATT === m ? '' : 'none';
     $(btn).className = ATT === m ? 'pri' : 'grey';
@@ -2246,15 +2249,38 @@ function pnSave(){
   if (!ds) { toast('Pick a date', false); return; }
   if (!why) { toast('Write the reason', false); return; }
   if (dy) return ask({ title: '⏱ Penalty – ' + dy + ' day' + (dy > 1 ? 's' : ''), names: [name], yes: 'Deduct', warn: true, en: 'Deduct ' + dy + ' day(s) of basic pay (basic ÷ 30 × ' + dy + ') from ' + name + "'s payslip for " + niceD(ds).replace(/^\S+\s/, '') + '?\nReason: ' + why + '\n(To undo: HR → ' + name + ' → remove the deduction.)' },
-    () => penSig(name, '−' + dy + ' day(s) of basic pay on ' + niceD(ds) + ' · Reason: ' + why, sig => call('addPenaltyDays', [PIN, name, ds, dy, why, sig], m => { toast(m + (sig === 'SUP' ? ' – his supervisor will take the signature' : ''), true); $('pnReason').value = ''; pnLoad(); })));
+    () => penSig(name, '−' + dy + ' day(s) of basic pay on ' + niceD(ds) + ' · Reason: ' + why, sig => call('addPenaltyDays', [PIN, name, ds, dy, why, sig], m => { toast(m + (sig === 'SUP' ? ' – his supervisor will take the signature' : ''), true); $('pnReason').value = ''; pnLoad(); pnHist(); })));
   ask({ title: '⏱ Penalty', names: [name], yes: 'Deduct', warn: true, en: 'Deduct ' + h + ' h from ' + name + "'s basic hours on " + niceD(ds) + '?\nReason: ' + why },
-    () => penSig(name, '−' + h + ' h on ' + niceD(ds) + ' · Reason: ' + why, sig => call('addPenalty', [PIN, name, ds, h, why, sig], m => { toast(m + (sig === 'SUP' ? ' – his supervisor will take the signature' : ''), true); $('pnReason').value = ''; pnLoad(); })));
+    () => penSig(name, '−' + h + ' h on ' + niceD(ds) + ' · Reason: ' + why, sig => call('addPenalty', [PIN, name, ds, h, why, sig], m => { toast(m + (sig === 'SUP' ? ' – his supervisor will take the signature' : ''), true); $('pnReason').value = ''; pnLoad(); pnHist(); })));
+}
+/* ---- 📜 penalty history: see every penalty, its signature, take a missing signature / send it to the supervisor, remove it ---- */
+function pnHist(){ call('penHistory', [PIN], pnHDraw, e => { $('pnH').textContent = e; }); }
+const PN_SIG = { signed: ['✅ Signed', '#2E7D32'], refused: ['❌ Refused to sign (witnessed)', '#C62828'], waiting: ['⏳ Waiting for supervisor', '#B26A00'], missing: ['⚠ Signature missing', '#C62828'] };
+const pnTxt = x => (x.k === 'd' ? '−' + x.days + ' day' + (x.days > 1 ? 's' : '') + ' = ' + aed(x.amt) : '−' + x.hrs + ' h') + ' on ' + niceD(x.ds);
+function pnHDraw(l){
+  window._pnh = l || [];
+  $('pnH').innerHTML = !l.length ? 'No penalties in the last 2 months.' : '<table style="width:100%">' + l.map((x, k) => { const b = PN_SIG[x.sig] || PN_SIG.missing;
+    return '<tr><td style="padding:6px 0;border-top:1px solid #eee">' + av(x.name) + '<b>' + esc(x.name) + '</b> · ' + esc(pnTxt(x)) +
+      (x.why ? '<div class="hint">' + esc(x.why) + '</div>' : '') + '<div style="color:' + b[1] + ';font-weight:600;font-size:13px">' + b[0] + '</div></td>' +
+      '<td style="text-align:right;white-space:nowrap;border-top:1px solid #eee">' + (x.sig === 'missing' ? '<button class="out sm" onclick="pnHSig(' + k + ')">✍ Signature</button> ' : '') +
+      '<button class="grey sm" onclick="pnHDel(' + k + ')">🗑</button></td></tr>'; }).join('') + '</table>';
+}
+function pnHSig(k){
+  const x = window._pnh[k], t = pnTxt(x) + (x.why ? ': ' + x.why : '');
+  penSig(x.name, t, sig => call('penSigAdd', [PIN, x.name, x.ref, t, sig], l => { pnHDraw(l); toast(x.name + (sig === 'SUP' ? ': sent to his supervisor' : sig === 'REF' ? ': refusal recorded' : ': signature saved'), true); }));
+}
+function pnHDel(k){
+  const x = window._pnh[k];
+  ask({ title: 'Remove penalty', names: [x.name], yes: 'Remove', warn: true, txt: 'Reason (optional)',
+        en: 'Remove ' + pnTxt(x) + '?' + (x.k === 'd' ? '\nThe ' + aed(x.amt) + ' deduction leaves his payslip.' : '\nAll penalty hours of that day are removed.') + '\nThe removal is recorded.' },
+    f => x.k === 'd' ? call('penDelDays', [PIN, x.id, (f && f.txt) || ''], l => { pnHDraw(l); toast(x.name + ': penalty removed', true); })
+                     : call('removePenalty', [PIN, x.name, x.ds, (f && f.txt) || ''], m => { toast(m, true); pnHist(); pnLoad(); }));
 }
 function pnDel(){
   const name = $('pnWorker').value, ds = $('pnDate').value, why = $('pnReason').value.trim();
   if (!name || !ds) { toast('Select a worker and date', false); return; }
   ask({ title: 'Remove penalty', names: [name], yes: 'Remove', en: 'Remove the penalty on ' + niceD(ds) + '? The removal is recorded' + (why ? ' with the reason: ' + why : '') + '.' },
-    () => call('removePenalty', [PIN, name, ds, why], m => { toast(m, true); $('pnReason').value = ''; pnLoad(); }));
+    () => call('removePenalty', [PIN, name, ds, why], m => { toast(m, true); $('pnReason').value = ''; pnLoad(); pnHist(); }));
 }
 /* ---- leave salary payments & receipts ---- */
 /* ---- ✈ Vacations: workers + management, leave salary, next eligibility (30 days every year) ---- */

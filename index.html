@@ -242,12 +242,12 @@ button.wait{opacity:.5;filter:grayscale(1);cursor:progress;pointer-events:none}
       <div id="wnList" style="margin-top:12px">Loading…</div>
     </div>
     <div class="card" data-pg="att" id="attPen">
-      <b>⏱ Penalty – deduct hours from basic hours</b>
-      <div class="hint">Taken off the worker's normal hours for that day, never off OT. The reason is saved as a note on the Penalty cell in the Daily Log.</div>
+      <b>⏱ Penalty – deduct hours or days</b>
+      <div class="hint">Hours: taken off the worker's normal hours for that day, never off OT. Days: that many days of basic pay (basic ÷ 30 × days) are deducted on that month's payslip. The reason is saved as a note in the Daily Log.</div>
       <select id="pnWorker" style="width:100%;margin-top:8px" onchange="pnLoad()"></select>
       <div class="row" style="margin-top:8px">
         <input id="pnDate" type="date" style="flex:1" onchange="pnLoad()">
-        <select id="pnHrs" style="flex:1"><option value="0.5">30 minutes</option><option value="1" selected>1 hour</option><option value="1.5">1½ hours</option><option value="2">2 hours</option><option value="3">3 hours</option><option value="4">4 hours</option></select>
+        <select id="pnHrs" style="flex:1"><option value="0.5">30 minutes</option><option value="1" selected>1 hour</option><option value="1.5">1½ hours</option><option value="2">2 hours</option><option value="3">3 hours</option><option value="4">4 hours</option><optgroup label="Days (basic pay ÷ 30 × days)"><option value="d1">1 day</option><option value="d2">2 days</option><option value="d3">3 days</option><option value="d5">5 days</option><option value="d7">7 days</option></optgroup></select>
       </div>
       <div id="pnCur" class="hint"></div>
       <input id="pnReason" placeholder="Reason (required)" style="width:100%;margin-top:8px">
@@ -387,7 +387,7 @@ button.wait{opacity:.5;filter:grayscale(1);cursor:progress;pointer-events:none}
   </div>
   <div id="mVac" style="display:none;margin:8px 0"><b>Vacation starts on</b><br><input id="mVacFrom" type="date" oninput="daysHint()" style="width:100%;margin-top:6px"></div>
   <div id="mPen" style="display:none;margin:8px 0"><b>Hours to deduct (from basic hours)</b><br>
-    <select id="mPenH" style="width:100%;margin-top:6px"><option value="0.5">30 minutes</option><option value="1" selected>1 hour</option><option value="1.5">1½ hours</option><option value="2">2 hours</option><option value="3">3 hours</option><option value="4">4 hours</option></select>
+    <select id="mPenH" style="width:100%;margin-top:6px"><option value="0.5">30 minutes</option><option value="1" selected>1 hour</option><option value="1.5">1½ hours</option><option value="2">2 hours</option><option value="3">3 hours</option><option value="4">4 hours</option><optgroup label="Days (basic pay ÷ 30 × days)"><option value="d1">1 day</option><option value="d2">2 days</option><option value="d3">3 days</option><option value="d5">5 days</option><option value="d7">7 days</option></optgroup></select>
   </div>
   <div id="mTxtD" style="display:none;margin:8px 0"><textarea id="mTxt" rows="3" maxlength="300" style="width:100%;font-size:15px;padding:8px;border-radius:8px;border:1px solid var(--line);font-family:inherit"></textarea></div>
   <div id="mDays" style="display:none;margin:8px 0"><b>Last day of leave</b> <span class="hint">(he is back on duty the next day)</span><br>
@@ -932,7 +932,7 @@ function ask(o, onYes, onNo){
       if (o.txtReq && !t) { toast(o.txtMsg || 'Write the note', false); return; }
       f = Object.assign(f || {}, { txt: t });
     }
-    if (o.pen) f = Object.assign(f || {}, { pen: Number($('mPenH').value) });
+    if (o.pen) { const v = $('mPenH').value; f = Object.assign(f || {}, /^d/.test(v) ? { pen: 0, days: Number(v.slice(1)) } : { pen: Number(v) }); }
     if (o.vac) {
       if (!$('mVacFrom').value) { toast('Pick the date the vacation starts', false); return; }
       f = Object.assign(f || {}, { from: $('mVacFrom').value });
@@ -1024,9 +1024,10 @@ function lvT(i){ const p = $('lvp' + i), b = $('lvb' + i), open = !p.classList.c
 /** Penalty – hours off his basic hours today (reason kept as a cell note in the Daily Log). */
 function penW(i){
   const w = window._list[i];
-  ask({ title: '⏱ Penalty – deduct hours', names: [w.name], yes: 'Deduct', warn: true, pen: true, txt: 'Reason (required) – e.g. extra break', txtReq: true, txtMsg: 'Write the reason',
-        en: 'The hours are taken off his basic hours for today (never off OT). Saved with your name and the time.' },
-    f => call('addPenalty', [PIN, w.name, '', f.pen, f.txt], d => { render(d); toast(w.name + ': −' + f.pen + ' h penalty', true); }));
+  ask({ title: '⏱ Penalty – deduct hours or days', names: [w.name], yes: 'Deduct', warn: true, pen: true, txt: 'Reason (required) – e.g. extra break', txtReq: true, txtMsg: 'Write the reason',
+        en: 'Hours are taken off his basic hours for today (never off OT). Days = that many days of basic pay deducted on this month\'s payslip. Saved with your name and the time; admin is told.' },
+    f => f.days ? call('addPenaltyDays', [PIN, w.name, '', f.days, f.txt], d => { render(d); toast(w.name + ': −' + f.days + ' day(s) penalty', true); })
+               : call('addPenalty', [PIN, w.name, '', f.pen, f.txt], d => { render(d); toast(w.name + ': −' + f.pen + ' h penalty', true); }));
 }
 function penDel(i){
   const w = window._list[i];
@@ -2197,10 +2198,12 @@ function pnLoad(){
   call('adminGet', [PIN, name, ds], r => { $('pnCur').textContent = r.found && r.pen ? 'Current penalty: ' + r.pen + ' h' : 'No penalty on this day.'; });
 }
 function pnSave(){
-  const name = $('pnWorker').value, ds = $('pnDate').value, h = Number($('pnHrs').value), why = $('pnReason').value.trim();
+  const name = $('pnWorker').value, ds = $('pnDate').value, v = $('pnHrs').value, h = Number(v), dy = /^d/.test(v) ? Number(v.slice(1)) : 0, why = $('pnReason').value.trim();
   if (!name) { toast('Select a worker', false); return; }
   if (!ds) { toast('Pick a date', false); return; }
   if (!why) { toast('Write the reason', false); return; }
+  if (dy) return ask({ title: '⏱ Penalty – ' + dy + ' day' + (dy > 1 ? 's' : ''), names: [name], yes: 'Deduct', warn: true, en: 'Deduct ' + dy + ' day(s) of basic pay (basic ÷ 30 × ' + dy + ') from ' + name + "'s payslip for " + niceD(ds).replace(/^\S+\s/, '') + '?\nReason: ' + why + '\n(To undo: HR → ' + name + ' → remove the deduction.)' },
+    () => call('addPenaltyDays', [PIN, name, ds, dy, why], m => { toast(m, true); $('pnReason').value = ''; pnLoad(); }));
   ask({ title: '⏱ Penalty', names: [name], yes: 'Deduct', warn: true, en: 'Deduct ' + h + ' h from ' + name + "'s basic hours on " + niceD(ds) + '?\nReason: ' + why },
     () => call('addPenalty', [PIN, name, ds, h, why], m => { toast(m, true); $('pnReason').value = ''; pnLoad(); }));
 }

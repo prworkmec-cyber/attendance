@@ -460,18 +460,29 @@ function tick(){
     ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getUTCMonth()] + ' ' + d.getUTCFullYear();
 }
 setInterval(tick, 1000); tick();
+const RO_FN = /^(serverNow|login|getRoster|list|get|notifications|notifOld|photoMap|pushKey|myDocs|myDocGet|profList|profGet|profDocGet|coList|coFileGet|proList|proFeeFile|vacList|dashData|hrMonth|hrSlip|hrMgSlip|adminLive|adminGet|leaveStats|staffInfo|workerView|docReqList|docReqFile|checkOutPreview|tgCheck)/;
+const SLOW_FN = /^(warnEvidence|mySubmit|mySubmitAll|mySave|profDoc|profPhoto|coFile|proFee|addLeaveDoc|updateSlipsNow|closeMonthNow|preCloseNow|hrMonth|dashData|createSlip|signLsReceipt|addWarning|signWarning|hr\w+)$/;
+let INFLIGHT = 0; const WAITQ = [];
 call('serverNow', [], t => { OFFSET = t - Date.now(); tick(); });
 
 function toast(t, ok){ const m=$('msg'); m.textContent=t; m.style.background= ok? '#2E7D32':'#C62828'; m.style.display='block'; clearTimeout(timer); timer=setTimeout(()=>m.style.display='none', ok ? 3500 : 8000); }
-function call(fn, args, done, onErr, onNet){
-  BUSY++; document.body.style.cursor = 'progress';
-  fetch(API, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ fn: fn, args: args, tok: TOK, dev: DEV }) })
+/* Google's server sometimes drops a request (it then hangs for 2 minutes and fails). Haroon 16 Nov:
+   every request has a time limit; requests that only read are tried again by themselves (up to 2 times);
+   at most 4 requests run at the same time (the rest wait their turn). */
+function call(fn, args, done, onErr, onNet, tries){
+  if (INFLIGHT >= 4) { WAITQ.push(() => call(fn, args, done, onErr, onNet, tries)); return; }
+  INFLIGHT++; BUSY++; document.body.style.cursor = 'progress'; tries = tries || 0;
+  const ctl = window.AbortController ? new AbortController() : null, tm = ctl ? setTimeout(() => ctl.abort(), SLOW_FN.test(fn) ? 120000 : 25000) : 0;
+  fetch(API, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ fn: fn, args: args, tok: TOK, dev: DEV }), signal: ctl ? ctl.signal : undefined })
     .then(r => r.json())
     .then(r => { if (!r.ok && r.error === 'SESSION_IDLE') { logout('Logged out – no activity for 10 minutes'); return; }
       if (!r.ok && r.error === 'SESSION_ENDED') { logout('Logged out – this account was opened on another phone'); return; }
       if (r.ok) done(r.data); else if (onErr) onErr(r.error); else toast(r.error, false); })
-    .catch(() => { if (onNet) onNet(); else toast('No internet / server not reachable', false); })
-    .finally(() => { if (--BUSY <= 0) { BUSY = 0; document.body.style.cursor = ''; } });
+    .catch(() => {
+      const ro = RO_FN.test(fn);
+      if (ro && tries < 2 && navigator.onLine !== false) { setTimeout(() => call(fn, args, done, onErr, onNet, tries + 1), 700); return; }   // just try again
+      if (onNet) onNet(); else toast(navigator.onLine === false ? 'No internet on this phone' : ro ? 'Server not reachable – try again' : 'The server did not answer – check whether it was saved, then try again', false); })
+    .finally(() => { clearTimeout(tm); INFLIGHT--; if (--BUSY <= 0) { BUSY = 0; document.body.style.cursor = ''; } const nx = WAITQ.shift(); if (nx) nx(); });
 }
 
 /* ---- session: survives an accidental refresh; ends on Log out or after 15 minutes without any tap ---- */

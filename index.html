@@ -442,7 +442,7 @@ button.wait{opacity:.5;filter:grayscale(1);cursor:progress;pointer-events:none}
   </div>
   <div class="hint" id="sigHint">The person who received the money signs below:</div>
   <canvas id="sigPad" width="600" height="260" style="width:100%;border:2px dashed #9CA3AF;border-radius:8px;touch-action:none;background:#fff"></canvas>
-  <div class="btns"><button class="grey" onclick="sigClear()">Clear</button><button id="sigSkip" class="grey">No signature</button><button id="sigNo" class="grey">Cancel</button><button id="sigYes" class="pri">Save</button></div>
+  <div class="btns"><button class="grey" onclick="sigClear()">Clear</button><button id="sigSkip" class="grey">No signature</button><button id="sigNo" class="grey">Cancel</button><button id="sigSup" class="out">📤 Send to supervisor</button><button id="sigYes" class="pri">Save</button></div>
 </div></div>
 
 <script>
@@ -461,7 +461,7 @@ function tick(){
 }
 setInterval(tick, 1000); tick();
 const RO_FN = /^(serverNow|login|getRoster|list|get|notifications|notifOld|photoMap|pushKey|myDocs|myDocGet|profList|profGet|profDocGet|coList|coFileGet|proList|proFeeFile|vacList|dashData|hrMonth|hrSlip|hrMgSlip|adminLive|adminGet|leaveStats|staffInfo|workerView|docReqList|docReqFile|checkOutPreview|tgCheck)/;
-const SLOW_FN = /^(warnEvidence|mySubmit|mySubmitAll|mySave|profDoc|profPhoto|coFile|proFee|addLeaveDoc|updateSlipsNow|closeMonthNow|preCloseNow|hrMonth|dashData|createSlip|signLsReceipt|addWarning|signWarning|hr\w+)$/;
+const SLOW_FN = /^(warnEvidence|mySubmit|mySubmitAll|mySave|profDoc|profPhoto|coFile|proFee|addLeaveDoc|updateSlipsNow|closeMonthNow|preCloseNow|hrMonth|dashData|createSlip|signLsReceipt|addWarning|signWarning|signReq|lsToSup|setLeaveSalary|addPenalty|addPenaltyDays|hr\w+)$/;
 let INFLIGHT = 0; const WAITQ = [];
 call('serverNow', [], t => { OFFSET = t - Date.now(); tick(); });
 
@@ -838,6 +838,7 @@ function render(d){
         '<option value="">' + (w.outT ? 'Checked out' : w.inT ? 'Active' : absent ? esc(LEAVE[w.status] || w.status) : lv ? esc(LEAVE[lv.code] || lv.code) : 'Present') + '</option>' + (locked && !isVac ? '<option value="P">✓ Present – he came to work</option>' : '') + LEAVE_OPTS +
       '</select><button class="grey sm" onclick="adv(' + i + ')">+ Advance</button>' + (lv ? '' : '<button class="grey sm" id="lvb' + i + '" onclick="lvT(' + i + ')">▸ Leave</button>') + '<button class="grey sm" style="margin-left:auto" onclick="penW(' + i + ')">⏱ Penalty</button><button class="grey sm" onclick="noteW(' + i + ')">📝 Note</button><button class="warnb' + (w.warn >= 5 ? ' hot' : '') + '" style="margin-left:auto" title="Warnings this month – tap to give a warning" onclick="warnW(' + i + ')">⚠ ' + (w.warn || 0) + '</button></div>' +
       (w.wsign && w.wsign.length ? '<div class="row" style="margin-top:6px">' + w.wsign.map((x, k) => '<button class="out" onclick="wsSign(' + i + ',' + k + ')">✍ Sign warning – ' + esc(x.reason.slice(0, 30)) + '</button>').join('') + '</div>' : '') +
+      (w.sreq && w.sreq.length ? '<div class="row" style="margin-top:6px">' + w.sreq.map((x, k) => '<button class="out" onclick="srSign(' + i + ',' + k + ')">✍ Sign ' + (x.kind === 'ls' ? 'leave salary' : 'penalty') + ' – ' + esc(x.text.replace(/^⏱ /, '').slice(0, 30)) + '</button>').join('') + '</div>' : '') +
       (isVac ? '<div class="row" style="margin-top:6px"><button class="in" onclick="vacAllowW(' + i + ')">✅ Allow check-in</button><button class="grey" onclick="vacExtW(' + i + ')">➕ Extend vacation</button></div>' : '') +
       (window._pend || []).map((p, k) => p.name === w.name ? '<div class="certb">⏳ ' + esc(LEAVE[p.code]) + ' ' + niceD(p.from) + (p.days > 1 ? '–' + niceD(p.to) : '') + ' waiting for admin · <button class="grey sm" onclick="docAdd(window._pend[' + k + '])">📎 ' + (p.docs ? 'Add page (' + p.docs + ' saved)' : 'Upload supporting document') + '</button></div>' : '').join('') +
       (lv ? '' : '<div class="lvp" id="lvp' + i + '"><button class="grey" onclick="vac(' + i + ',\'AV\')">✈ Annual vacation</button><button class="grey" onclick="vac(' + i + ',\'EL\')">Emergency leave</button></div>') +
@@ -1037,8 +1038,36 @@ function penW(i){
   const w = window._list[i];
   ask({ title: '⏱ Penalty – deduct hours or days', names: [w.name], yes: 'Deduct', warn: true, pen: true, txt: 'Reason (required) – e.g. extra break', txtReq: true, txtMsg: 'Write the reason',
         en: 'Hours are taken off his basic hours for today (never off OT). Days = that many days of basic pay deducted on this month\'s payslip. Saved with your name and the time; admin is told.' },
-    f => f.days ? call('addPenaltyDays', [PIN, w.name, '', f.days, f.txt], d => { render(d); toast(w.name + ': −' + f.days + ' day(s) penalty', true); })
-               : call('addPenalty', [PIN, w.name, '', f.pen, f.txt], d => { render(d); toast(w.name + ': −' + f.pen + ' h penalty', true); }));
+    f => penSig(w.name, (f.days ? '−' + f.days + ' day(s) of basic pay' : '−' + f.pen + ' h') + ' · Reason: ' + f.txt, sig => f.days
+               ? call('addPenaltyDays', [PIN, w.name, '', f.days, f.txt, sig], d => { render(d); toast(w.name + ': −' + f.days + ' day(s) penalty', true); })
+               : call('addPenalty', [PIN, w.name, '', f.pen, f.txt, sig], d => { render(d); toast(w.name + ': −' + f.pen + ' h penalty', true); })));
+}
+/** ✍ Penalty signature (Haroon 16 Nov): sign now, refused (you are the witness), or admin → 📤 send to his supervisor. */
+function penSig(name, txt, go){
+  sign({ worker: name, noRcv: true, optional: true, skipText: 'Refused to sign', title: '⏱ Penalty – signature', hint: name + ' signs below to acknowledge this penalty:', text: txt,
+         sup: window._role === 'ADMIN' ? () => go('SUP') : null }, s => {
+    if (s.sig) { go(s.sig); return; }
+    ask({ title: 'Refused to sign', names: [name], yes: 'Yes, he refused', warn: true, en: 'Record that ' + name + ' REFUSED to sign this penalty?\nYou are recorded as the witness.' }, () => go('REF'));
+  });
+}
+/* ---- ✍ supervisor takes a waiting signature (penalty / leave salary) that an admin sent him ---- */
+function srSign(i, k){
+  const w = window._list[i], x = w.sreq[k], ls = x.kind === 'ls';
+  sign({ worker: w.name, noRcv: !ls, optional: !ls, skipText: 'Refused to sign', title: '✍ ' + (ls ? 'Leave salary' : 'Penalty') + ' – signature',
+         hint: ls ? 'The person who received the money signs below:' : w.name + ' signs below to acknowledge this penalty (given by ' + x.by + '):', text: x.text }, s => {
+    const go = sig => call('signReq', [PIN, x.id, sig, s.by || '', s.photo || ''], d => { render(d); toast(w.name + (sig ? ': signature saved' : ': refusal recorded'), true); });
+    if (s.sig) { go(s.sig); return; }
+    ask({ title: 'Refused to sign', names: [w.name], yes: 'Yes, he refused', warn: true, en: 'Record that ' + w.name + ' REFUSED to sign?\nYou are recorded as the witness.' }, () => go(''));
+  });
+}
+/** Tapped a "take the signature" notice: open the pad straight away. */
+function sigGo(id){
+  const l = window._list || [];
+  for (let i = 0; i < l.length; i++) {
+    const a = (l[i].wsign || []).findIndex(x => x.id === id); if (a >= 0) return wsSign(i, a);
+    const b = (l[i].sreq || []).findIndex(x => x.id === id); if (b >= 0) return srSign(i, b);
+  }
+  toast('Already signed – nothing waiting', true);
 }
 function penDel(i){
   const w = window._list[i];
@@ -1109,7 +1138,7 @@ function evSend(name, then){
 }
 function warnSign(name, n, why, go){
   sign({ worker: name, noRcv: true, optional: true, skipText: 'Refused to sign', title: '⚠ Warning ' + n + ' – acknowledgement',
-         hint: name + ' signs below to acknowledge this warning:', text: 'Reason: ' + why }, s => {
+         hint: name + ' signs below to acknowledge this warning:', text: 'Reason: ' + why, sup: window._role === 'ADMIN' ? () => go('SUP') : null }, s => {
     if (s.sig) { go(s.sig); return; }
     ask({ title: 'Refused to sign', names: [name], yes: 'Yes, he refused', warn: true, en: 'Record that ' + name + ' REFUSED to sign this warning?\nYou are recorded as the witness.' }, () => go(''));
   });
@@ -1272,8 +1301,8 @@ function lsSave(name){
   const a = Number($('ls_' + name.replace(/\W/g, '_')).value);
   if (!(a > 0)) { toast('Enter the amount paid', false); return; }
   ask({ title: 'Leave salary paid', names: [name], yes: 'Save', en: name + '\nLeave salary paid: ' + aed(a) },
-    () => sign({ worker: name, optional: true, text: 'Leave salary of ' + aed(a) + ' for ' + name + ', paid on ' + niceD(dubaiNow().toISOString().slice(0, 10)) + '.' },
-      s => call('setLeaveSalary', [PIN, name, a, s.by, s.sig, s.photo || ''], rows => { toast(name + ': leave salary saved', true); drawStaff(rows); lsrLoad(); })));
+    () => { const save = s => call('setLeaveSalary', [PIN, name, a, s.by, s.sig, s.photo || ''], rows => { toast(name + ': leave salary saved' + (s.sig === 'SUP' ? ' – his supervisor will take the signature' : ''), true); drawStaff(rows); lsrLoad(); });
+      sign({ worker: name, optional: true, text: 'Leave salary of ' + aed(a) + ' for ' + name + ', paid on ' + niceD(dubaiNow().toISOString().slice(0, 10)) + '.', sup: () => save({ by: '', sig: 'SUP', photo: '' }) }, save); });
 }
 /* ---- signature pad (proof that leave salary was received) ---- */
 let SIG_DIRTY = false;
@@ -1290,6 +1319,8 @@ function sign(o, done, cancel){
   const close = () => { $('sigM').style.display = 'none'; };
   $('sigNo').onclick = () => { close(); if (cancel) cancel(); };
   $('sigSkip').onclick = () => { close(); done({ by: '', sig: '' }); };
+  $('sigSup').style.display = o.sup ? '' : 'none';   // admin: the worker is not here – his supervisor takes it (he is told)
+  $('sigSup').onclick = () => { close(); o.sup(); };
   $('sigYes').onclick = () => {
     const other = document.querySelector('input[name=rcv]:checked').value === 'O', on = $('sigOther').value.trim();
     if (other && !on) { toast('Write the name of the person who received it', false); return; }
@@ -1702,7 +1733,7 @@ function pushAuto(){ if (pushOk() && Notification.permission === 'granted') push
 function pushTest(){ call('pushTest', [PIN], () => toast('Test sent – it should pop up in a few seconds', true)); }
 function ntShow(k, old){
   const x = (old ? window._ntOld : window._nt.items)[k], wk = window._role === 'WORKER';
-  ask({ title: '🔔 ' + x.when, yes: x.page && !wk ? 'Open ➜' : 'Close', en: x.text,
+  ask({ title: '🔔 ' + x.when, yes: x.page && !wk ? (/^sig:/.test(x.page) && window._role !== 'ADMIN' ? '✍ Open signature pad' : 'Open ➜') : 'Close', en: x.text,
         html: (x.by && !wk ? '<div class="hint" style="margin-top:6px">From: ' + esc(String(x.by).replace(/^Admin \((.*)\)$/, '$1')) + '</div>' : '') +
               '<button class="grey" style="width:100%;margin-top:8px" onclick="' + (old ? 'ntOldDraw()' : 'ntOpen()') + '">⬅ Back to the list</button>' },
     () => { if (x.page && !wk) ntGo(x.page); });
@@ -1715,8 +1746,9 @@ function ntOldDraw(){
 }
 function ntGo(p){
   $('modal').style.display = 'none';
-  if (window._role === 'ADMIN') { if (p) pg(p); }
+  if (window._role === 'ADMIN') { if (p && !/^sig:/.test(p)) pg(p); }
   else if (window._role === 'WORKER') wkLoad();
+  else if (/^sig:/.test(p || '')) call('getRoster', [PIN], d => { render(d); sigGo(p.slice(4)); });
   else refresh();
 }
 /* ---- 🔑 Logins & PINs (admin) ---- */
@@ -2214,9 +2246,9 @@ function pnSave(){
   if (!ds) { toast('Pick a date', false); return; }
   if (!why) { toast('Write the reason', false); return; }
   if (dy) return ask({ title: '⏱ Penalty – ' + dy + ' day' + (dy > 1 ? 's' : ''), names: [name], yes: 'Deduct', warn: true, en: 'Deduct ' + dy + ' day(s) of basic pay (basic ÷ 30 × ' + dy + ') from ' + name + "'s payslip for " + niceD(ds).replace(/^\S+\s/, '') + '?\nReason: ' + why + '\n(To undo: HR → ' + name + ' → remove the deduction.)' },
-    () => call('addPenaltyDays', [PIN, name, ds, dy, why], m => { toast(m, true); $('pnReason').value = ''; pnLoad(); }));
+    () => penSig(name, '−' + dy + ' day(s) of basic pay on ' + niceD(ds) + ' · Reason: ' + why, sig => call('addPenaltyDays', [PIN, name, ds, dy, why, sig], m => { toast(m + (sig === 'SUP' ? ' – his supervisor will take the signature' : ''), true); $('pnReason').value = ''; pnLoad(); })));
   ask({ title: '⏱ Penalty', names: [name], yes: 'Deduct', warn: true, en: 'Deduct ' + h + ' h from ' + name + "'s basic hours on " + niceD(ds) + '?\nReason: ' + why },
-    () => call('addPenalty', [PIN, name, ds, h, why], m => { toast(m, true); $('pnReason').value = ''; pnLoad(); }));
+    () => penSig(name, '−' + h + ' h on ' + niceD(ds) + ' · Reason: ' + why, sig => call('addPenalty', [PIN, name, ds, h, why, sig], m => { toast(m + (sig === 'SUP' ? ' – his supervisor will take the signature' : ''), true); $('pnReason').value = ''; pnLoad(); })));
 }
 function pnDel(){
   const name = $('pnWorker').value, ds = $('pnDate').value, why = $('pnReason').value.trim();
@@ -2289,7 +2321,8 @@ function rc(id){
 /** Add a signature later to a payment recorded without one. */
 function rcSign(id){
   const r = window._rc; $('rcM').style.display = 'none';
-  sign({ text: 'Leave salary ' + aed(r.amt) + ' paid to ' + r.name + ' on ' + niceD(r.ds) + ' ' + r.ds.slice(0, 4) + ' (receipt ' + r.id + ').', worker: r.name },
+  sign({ text: 'Leave salary ' + aed(r.amt) + ' paid to ' + r.name + ' on ' + niceD(r.ds) + ' ' + r.ds.slice(0, 4) + ' (receipt ' + r.id + ').', worker: r.name,
+         sup: () => call('lsToSup', [PIN, id], m => { toast(m, true); lsrLoad(); }) },
     s => call('signLsReceipt', [PIN, id, s.by, s.sig, s.photo || ''], () => { toast('Signature saved on receipt ' + id, true); lsrLoad(); rc(id); }),
     () => { $('rcM').style.display = 'flex'; });
 }

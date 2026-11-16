@@ -13,7 +13,7 @@ self.addEventListener('push', e => e.waitUntil((async () => {
   } catch (err) {}
   if (!items.length) items = [{ t: 'You have a new notification – tap to open' }];
   const last = items[items.length - 1].t;
-  return self.registration.showNotification('WORKMEC', { body: items.length > 1 ? last + '\n+' + (items.length - 1) + ' more' : last,
+  return self.registration.showNotification('WORKMEC FZE', { body: items.length > 1 ? last + '\n+' + (items.length - 1) + ' more' : last,
     icon: 'icon-192.png', badge: 'icon-192.png', tag: 'wm', renotify: true, data: { url: './?bell=1' } });
 })()));
 self.addEventListener('notificationclick', e => {

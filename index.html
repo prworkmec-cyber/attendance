@@ -3,13 +3,13 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>WORKMEC</title>
+<title>WORKMEC FZE</title>
 <meta name="theme-color" content="#1F4E78">
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="WORKMEC">
+<meta name="apple-mobile-web-app-title" content="WORKMEC FZE">
 <style>
   :root{--blue:#1F4E78;--bg:#F4F6F9;--card:#fff;--line:#E1E5EB;--green:#2E7D32;--red:#C62828;--amber:#B26A00;--muted:#6B7280}
   *{box-sizing:border-box}
@@ -127,7 +127,7 @@ button.wait{opacity:.5;filter:grayscale(1);cursor:progress;pointer-events:none}
 </head>
 <body>
 <header>
-  <h1>WORKMEC Attendance</h1>
+  <h1>WORKMEC FZE</h1>
   <button id="lo" class="hidden" onclick="logout()">Log out</button>
   <button id="bell" class="hidden" onclick="ntOpen()">🔔<span id="ntN" class="apb"></span></button>
   <button id="myd" class="hidden" onclick="myOpen()">👤 My profile</button>
@@ -1559,7 +1559,7 @@ function prOpen(name){
 /* ---- 📎 document copies (photo or PDF) per document – saved to Drive at once, opened inside the app ---- */
 const docKey = s => String(s || '').replace(/\W+/g, '_');
 const prFilesHtml = doc => { const l = ((window._pd || {}).files || []).filter(f => f.doc === doc);
-  return l.map(f => '<div class="hint" style="margin:2px 0">📄 ' + esc(f.name) + ' · ' + esc(niceDY(f.at)) + ' <a href="#" onclick="prDocOpen(\'' + f.id + '\');return false">Open</a> · <a href="#" style="color:#C62828" onclick="prDocDel(\'' + f.id + '\');return false">Remove</a></div>').join(''); };
+  return l.map(f => '<div class="hint" style="margin:2px 0">📄 ' + esc(f.name) + ' · ' + esc(niceDY(f.at)) + ' <a href="#" onclick="prDocOpen(\'' + f.id + '\');return false">👁 View</a> · <a href="#" style="color:#C62828" onclick="prDocDel(\'' + f.id + '\');return false">Remove</a></div>').join(''); };
 const prUpBtn = doc => '<label class="grey sm" style="display:inline-block;margin-top:4px;padding:5px 10px;border-radius:8px;background:#6B7280;color:#fff;cursor:pointer;font-size:13px">📎 Upload copy<input type="file" accept="image/*,application/pdf" style="display:none" onchange="prDocUp(this,' + "'" + esc(doc).replace(/'/g, '') + "'" + ')"></label><div id="pfF_' + docKey(doc) + '" data-label="' + esc(doc) + '">' + prFilesHtml(doc) + '</div>';
 function prFilesRedraw(){ document.querySelectorAll('[id^="pfF_"]').forEach(el => { el.innerHTML = prFilesHtml(el.dataset.label || ''); }); }
 function prDocUp(inp, doc){
@@ -1580,8 +1580,8 @@ function prDocOpen(id){
   call('profDocGet', [PIN, window._pd.name, id], r => {
     const b = atob(r.data.split(',')[1]), u8 = new Uint8Array(b.length); for (let i = 0; i < b.length; i++) u8[i] = b.charCodeAt(i);
     const url = URL.createObjectURL(new Blob([u8], { type: r.type })), ov = document.createElement('div');
-    ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:9999;display:flex;flex-direction:column;padding:10px';
-    ov.innerHTML = '<div class="row" style="margin-bottom:6px"><a href="' + url + '" download style="color:#fff;flex:1">⬇ Download</a><button class="grey" onclick="this.closest(\'div[style]\').parentNode.remove()">✕ Close</button></div>' +
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:9999;display:flex;flex-direction:column;padding:10px'; ov.className = 'fv';
+    ov.innerHTML = '<div class="row" style="margin-bottom:6px"><a href="' + url + '" download style="color:#fff;flex:1">⬇ Download</a>' + (/pdf/.test(r.type) ? '' : ROT_BTN) + '<button class="grey" onclick="this.closest(\'.fv\').remove()">✕ Close</button></div>' +
       (/pdf/.test(r.type) ? '<iframe src="' + url + '" style="flex:1;background:#fff;border:0"></iframe>' : '<div style="flex:1;overflow:auto;text-align:center"><img src="' + url + '" style="max-width:100%"></div>');
     document.body.appendChild(ov);
   });
@@ -1818,11 +1818,11 @@ function myDraw(r){
         inp('myEm', '✉ Email (task invites come here)', me.email, 'email', 'name@gmail.com') + inp('myMo', '📱 Mobile (UAE)', me.mobile, 'tel', '05x xxx xxxx') + inp('myHo', '🏠 Home contact (name / number)', me.home, 'text', 'e.g. Wife – +92 300 …') + '</div>' +
       '<div style="font-weight:bold;margin-top:10px">📄 My documents</div>' + docs.map((d, k) => '<div class="mydr" data-k="' + k + '" style="border:1px solid var(--line);border-radius:8px;padding:8px;margin:8px 0">' +
         (d.other ? '<b>➕ Other document</b><input class="myL" placeholder="Name (e.g. Labour card)" style="width:100%;margin-top:4px">'
-                 : '<b>' + esc(d.doc) + '</b> <span class="hint">' + (d.no || d.exp ? 'on record: ' + esc(d.no || '–') + (d.exp ? ' · exp ' + esc(niceDY(d.exp)) : '') : 'nothing on record') + (d.files ? ' · 📎 ' + d.files : '') + '</span>') +
+                 : '<b>' + esc(d.doc) + '</b> <span class="hint">' + (d.no || d.exp ? 'on record: ' + esc(d.no || '–') + (d.exp ? ' · exp ' + esc(niceDY(d.exp)) : '') : 'nothing on record') + '</span>' + (d.fl || []).map(f => '<div class="hint" style="margin:2px 0">📄 ' + esc(f.name) + ' · ' + esc(niceDY(f.at)) + ' <a href="#" onclick="call(\'myDocGet\', [PIN, \'' + f.id + '\'], fileShow);return false">👁 View</a></div>').join('')) +
         '<div class="row" style="margin-top:4px"><input class="myN" placeholder="Number" value="' + esc(d.no || '') + '" style="flex:1;min-width:120px"><input class="myE" type="date" value="' + esc(d.exp || '') + '" style="flex:1" title="Expiry date"></div>' +
         '<label class="grey sm" style="display:inline-block;margin-top:6px;padding:5px 10px;border-radius:8px;background:#6B7280;color:#fff;cursor:pointer;font-size:13px">📷 Photo / PDF<input class="myF" type="file" accept="image/*,application/pdf" style="display:none" onchange="this.parentNode.nextElementSibling.textContent = this.files[0] ? \'✓ \' + this.files[0].name : \'\'"></label> <span class="hint"></span></div>').join('') +
       '<button class="pri" style="width:100%;margin-top:6px" onclick="mySendAll()">📤 Save / send all</button>' +
-      (r.reqs.length ? '<div style="margin-top:12px"><b>Sent by me</b>' + r.reqs.map(x => '<div class="wrow"><span>' + esc(x.doc) + (x.no ? ' ' + esc(x.no) : '') + (x.exp ? ' · exp ' + esc(niceDY(x.exp)) : '') + '<br><span class="hint">' + esc(x.at) + '</span></span><span>' + st(x) + '</span></div>').join('') + '</div>' : '') });
+      (r.reqs.length ? '<div style="margin-top:12px"><b>Sent by me</b>' + r.reqs.map(x => '<div class="wrow"><span>' + esc(x.doc) + (x.no ? ' ' + esc(x.no) : '') + (x.exp ? ' · exp ' + esc(niceDY(x.exp)) : '') + '<br><span class="hint">' + esc(x.at) + (x.file ? ' · <a href="#" onclick="call(\'docReqFile\', [PIN, \'' + x.id + '\'], fileShow);return false">👁 View</a>' : '') + '</span></span><span>' + st(x) + '</span></div>').join('') + '</div>' : '') });
 }
 const fileData = f => new Promise((ok, no) => {
   if (!f) { ok(''); return; }
@@ -1864,13 +1864,21 @@ function myPhoto(inp){
   };
   img.onerror = () => toast('Could not read the photo', false); img.src = url;
 }
+/** ⟳ Turn a picture 90° (drawn again, so it fits the screen). Haroon 16 Nov */
+function rotImg(img){
+  if (!img || !img.naturalWidth) return;
+  const c = document.createElement('canvas'), w = img.naturalWidth, h = img.naturalHeight; c.width = h; c.height = w;
+  const g = c.getContext('2d'); g.translate(h, 0); g.rotate(Math.PI / 2); g.drawImage(img, 0, 0);
+  img.src = c.toDataURL('image/jpeg', 0.92); img.dataset.rot = ((Number(img.dataset.rot) || 0) + 90) % 360;
+}
+const ROT_BTN = '<button class="grey" style="margin-right:6px" onclick="rotImg(this.closest(\'.fv\').querySelector(\'img\'))">⟳ Rotate</button>';
 function fileShow(r){
   const b = atob(r.data.split(',')[1]), u8 = new Uint8Array(b.length); for (let i = 0; i < b.length; i++) u8[i] = b.charCodeAt(i);
   const url = URL.createObjectURL(new Blob([u8], { type: r.type })), ov = document.createElement('div');
-  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:9999;display:flex;flex-direction:column;padding:10px';
-  ov.innerHTML = '<div class="row" style="margin-bottom:6px"><a href="' + url + '" download style="color:#fff;flex:1">⬇ Download</a><button class="grey">✕ Close</button></div>' +
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:9999;display:flex;flex-direction:column;padding:10px'; ov.className = 'fv';
+  ov.innerHTML = '<div class="row" style="margin-bottom:6px"><a href="' + url + '" download style="color:#fff;flex:1">⬇ Download</a>' + (/pdf/.test(r.type) ? '' : ROT_BTN) + '<button class="grey fvx">✕ Close</button></div>' +
     (/pdf/.test(r.type) ? '<iframe src="' + url + '" style="flex:1;background:#fff;border:0"></iframe>' : '<div style="flex:1;overflow:auto;text-align:center"><img src="' + url + '" style="max-width:100%"></div>');
-  ov.querySelector('button').onclick = () => ov.remove();
+  ov.querySelector('.fvx').onclick = () => ov.remove();
   document.body.appendChild(ov);
 }
 /* admin: documents sent by staff, waiting for a check */
@@ -2124,10 +2132,16 @@ function docTake(inp){
 function docView(p, canDel){
   $('docT').textContent = p.name + ' – ' + (LEAVE[p.code] || p.code) + ' ' + niceD(p.from); $('docB').innerHTML = '<div style="color:#fff">Loading…</div>'; $('docM').style.display = 'block';
   const draw = l => { $('docB').innerHTML = !l.length ? '<div style="color:#fff">No pages.</div>' : l.map(x =>
-      '<div style="color:#fff;margin:6px 0">Page ' + x.page + ' · ' + esc(x.by) + ' · ' + esc(x.at) + (canDel ? ' <button class="grey sm" onclick="docDel(' + x.row + ')">Delete</button>' : '') + ' <a href="' + x.url + '" target="_blank" style="color:#9cf">open full size</a></div>' +
-      '<img src="' + x.img + '" style="width:100%;background:#fff;border-radius:6px">').join(''); };
+      '<div class="fv"><div style="color:#fff;margin:6px 0">Page ' + x.page + ' · ' + esc(x.by) + ' · ' + esc(x.at) + ' <button class="grey sm" onclick="rotImg(this.closest(\'.fv\').querySelector(\'img\'));' + (canDel ? 'this.nextElementSibling.style.display=\'\'' : '') + '">⟳ Rotate</button>' +
+      (canDel ? '<button class="pri sm" style="display:none" onclick="docRotSave(' + x.row + ',this)">💾 Save turned</button> <button class="grey sm" onclick="docDel(' + x.row + ')">Delete</button>' : '') + ' <a href="' + x.url + '" target="_blank" style="color:#9cf">open full size</a></div>' +
+      '<img src="' + x.img + '" style="width:100%;background:#fff;border-radius:6px"></div>').join(''); };
   window._docP = p; window._docDraw = draw;
   call('getLeaveDocs', [PIN, p.name, p.from, p.code], draw, e => { $('docM').style.display = 'none'; toast(e, false); });
+}
+function docRotSave(row, btn){
+  const p = window._docP, img = btn.closest('.fv').querySelector('img');
+  if (!(Number(img.dataset.rot) % 360)) { toast('Turn the page first', false); return; }
+  call('rotateLeaveDoc', [PIN, p.name, p.from, p.code, row, img.src], l => { window._docDraw(l); toast('Saved the right way up', true); });
 }
 function docDel(row){
   const p = window._docP;

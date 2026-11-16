@@ -2449,7 +2449,7 @@ function drawStaff(rows){
     '<tr><td>' + av(r.name) + esc(r.name) + (r.tabOk ? '' : '<br><span class="flag">No payslip</span> <button class="grey sm" onclick="mkSlip(' + i + ')">Create payslip</button>') + '</td>' +
     '<td><select onchange="chShift(' + i + ',this)"><option' + (r.shift==='DAY'?' selected':'') + '>DAY</option><option' + (r.shift==='NIGHT'?' selected':'') + '>NIGHT</option></select></td>' +
     '<td>' + (r.active ? 'Active' : '<span class="flag">Removed</span>') + '</td>' +
-    '<td style="white-space:nowrap">' + (r.tabOk ? '<button class="grey sm" onclick="stEdit(' + i + ')">Edit</button> ' : '') + '<button class="' + (r.active ? 'out' : 'in') + '" onclick="tog(' + i + ')">' + (r.active ? 'Remove' : 'Restore') + '</button></td></tr>'
+    '<td style="white-space:nowrap"><button class="grey sm" onclick="wDocs(\'' + esc(r.name).replace(/'/g, "\\'") + '\')">📄 Docs</button> ' + (r.tabOk ? '<button class="grey sm" onclick="stEdit(' + i + ')">Edit</button> ' : '') + '<button class="' + (r.active ? 'out' : 'in') + '" onclick="tog(' + i + ')">' + (r.active ? 'Remove' : 'Restore') + '</button></td></tr>'
   ).join('');
   window._staff = rows;
   const keep = $('aWorker').value;

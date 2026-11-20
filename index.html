@@ -463,7 +463,7 @@ function tick(){
 }
 setInterval(tick, 1000); tick();
 const RO_FN = /^(serverNow|penHistory|login|getRoster|list|get|notifications|notifOld|photoMap|pushKey|myDocs|myDocGet|profList|profGet|profDocGet|coList|coFileGet|proList|proFeeFile|vacList|dashData|hrMonth|hrSlip|hrMgSlip|adminLive|adminGet|leaveStats|staffInfo|workerView|docReqList|docReqFile|checkOutPreview|tgCheck)/;
-const SLOW_FN = /^(warnEvidence|mySubmit|mySubmitAll|mySave|profDoc|profPhoto|coFile|proFee|addLeaveDoc|updateSlipsNow|closeMonthNow|preCloseNow|hrMonth|dashData|createSlip|signLsReceipt|addWarning|signWarning|signReq|lsToSup|penSigAdd|penDelDays|setLeaveSalary|addPenalty|addPenaltyDays|hr\w+)$/;
+const SLOW_FN = /^(checkIn|checkOut|checkInMany|checkOutMany|checkOutPreview|warnEvidence|mySubmit|mySubmitAll|mySave|profDoc|profPhoto|coFile|proFee|addLeaveDoc|updateSlipsNow|closeMonthNow|preCloseNow|hrMonth|dashData|createSlip|signLsReceipt|addWarning|signWarning|signReq|lsToSup|penSigAdd|penDelDays|setLeaveSalary|addPenalty|addPenaltyDays|hr\w+)$/;
 let INFLIGHT = 0; const WAITQ = [];
 call('serverNow', [], t => { OFFSET = t - Date.now(); tick(); });
 
@@ -1438,6 +1438,7 @@ async function qSync(){
 function qBar(){ const b = $('qbar'); if (b) b.classList.add('hidden'); }
 window.addEventListener('online', () => setTimeout(qSync, 1500));
 setTimeout(qSync, 3000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden && navigator.onLine) setTimeout(qSync, 800); });   // phone back to the app: send waiting punches at once
 setInterval(() => { if (navigator.onLine) qSync(); }, 30000);
 /* ---- 👤 WORKER APP: own month, view only + leave requests ---- */
 const RQ_T = { AV: 'Annual vacation', EL: 'Emergency leave', PL: 'Personal leave (unpaid)', SL: 'Sick leave' };

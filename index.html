@@ -1403,7 +1403,7 @@ const qHH = at => new Date(at || Date.now()).toLocaleTimeString('en-GB', { hour:
    company) goes to the admins, not back to the supervisor. */
 function qAdd(it){
   it.tok = PIN; const q = qGet(); q.push(it); qSet(q);
-  qLocal(it); toast('✅ ' + it.label, true);
+  qLocal(it); toast('✅ ' + it.label, true); qBar(); setTimeout(qSync, 5000);
 }
 function qLocal(it){   // show the punch on the screen straight away
   const d = window._D; if (!d || !d.list) return;
@@ -1435,10 +1435,19 @@ async function qSync(){
     }
   } finally { QBUSY = false; qBar(); if (sent && window._role === 'SUP' && /^T:/.test(PIN)) refresh(); }
 }
-function qBar(){ const b = $('qbar'); if (b) b.classList.add('hidden'); }
+/* Haroon 20 Nov: a punch waiting on the phone is shown, so the supervisor knows (it is still sent by itself). */
+function qBar(){ const b = $('qbar'); if (!b) return; const n = qGet().length;
+  b.classList.toggle('hidden', !n || window._role !== 'SUP');
+  if (n) b.innerHTML = '📶 <b>' + n + ' punch' + (n > 1 ? 'es' : '') + ' not sent yet</b> – no internet. Keep the app open with internet; it is sent by itself.' +
+    ' <button class="grey sm" onclick="qSync()">Send now</button>'; }
 window.addEventListener('online', () => setTimeout(qSync, 1500));
 setTimeout(qSync, 3000);
-document.addEventListener('visibilitychange', () => { if (!document.hidden && navigator.onLine) setTimeout(qSync, 800); });   // phone back to the app: send waiting punches at once
+document.addEventListener('visibilitychange', () => { if (!document.hidden && navigator.onLine) setTimeout(qSync, 800); else if (document.hidden) qBeacon(); });
+/** Supervisor leaves the app with punches still waiting: one last try that works even after the app is closed.
+ *  If it arrives, the copy kept on the phone is later answered "already saved" (no email). */
+function qBeacon(){ try { if (!navigator.sendBeacon || !navigator.onLine) return;
+  qGet().forEach(it => { const pin = /^T:/.test(PIN) && window._role === 'SUP' ? PIN : (it.tok || ''); if (!pin) return; const a = it.args.slice(); a[0] = pin;
+    navigator.sendBeacon(API, new Blob([JSON.stringify({ fn: it.fn, args: a, tok: TOK, dev: DEV, q: 1 })], { type: 'text/plain;charset=utf-8' })); }); } catch (e) {} }   // phone back to the app: send waiting punches at once
 setInterval(() => { if (navigator.onLine) qSync(); }, 30000);
 /* ---- 👤 WORKER APP: own month, view only + leave requests ---- */
 const RQ_T = { AV: 'Annual vacation', EL: 'Emergency leave', PL: 'Personal leave (unpaid)', SL: 'Sick leave' };

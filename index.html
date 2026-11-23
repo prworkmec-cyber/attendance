@@ -86,6 +86,10 @@
   .lvp{display:none;width:100%;gap:6px;margin-top:6px} .lvp.open{display:flex} .lvp button{flex:1}
   .tabs button.on{background:var(--blue);color:#fff}
   #sigM{z-index:60} #sigM label{display:block;padding:5px 0} #modal h3.warnh{color:var(--red)}
+  #sigM{padding:0} #sigM .box{max-width:none;width:100%;height:100%;max-height:none;border-radius:0;display:flex;flex-direction:column;padding:10px 12px}
+  #sigM #sigPad{flex:1 1 auto;min-height:150px;height:40vh} #sigTurn{display:none;text-align:center;color:#B26A00;font-weight:600;margin:2px 0 4px}
+  @media (orientation:portrait){ #sigTurn{display:block} }
+  @media (orientation:landscape) and (max-height:560px){ #sigM h3{font-size:15px;margin:0 0 2px} #sigM #sigTxt{font-size:12px;margin-bottom:2px} #sigM .hint{margin:1px 0} #sigM .btns{margin-top:4px} #sigM #sigPad{height:auto} #sigM .btns button{padding:6px 10px} }
   #wlM{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;z-index:56;padding:16px}
   #wlM .box{background:#fff;border-radius:12px;max-width:620px;width:100%;max-height:90vh;overflow:auto;padding:22px;color:#111;font-size:14px;line-height:1.5}
   #wlM .lt{display:flex;justify-content:space-between;gap:8px;font-size:13px;margin:6px 0 12px} #wlM .sub{font-weight:700;text-decoration:underline;margin:10px 0}
@@ -178,7 +182,7 @@ button.wait{opacity:.5;filter:grayscale(1);cursor:progress;pointer-events:none}
       <div id="lvsL" style="margin-top:8px">Loading…</div>
     </div>
     <div class="card" data-pg="hr">
-      <div class="row"><b style="flex:1" id="hrT">Payroll</b><button class="grey sm" onclick="hrUpd()">⟳ Update now</button></div>
+      <div class="row"><b style="flex:1" id="hrT">Payroll</b><button class="pri sm" onclick="payOpen()">💰 Payday &amp; slips</button> <button class="grey sm" onclick="hrUpd()">⟳ Update now</button></div>
       <div class="hint">Slips update by themselves every morning at 08:00. Tap a worker to open his payslip.</div>
       <div id="hrL" style="margin-top:8px"></div>
     </div>
@@ -443,6 +447,7 @@ button.wait{opacity:.5;filter:grayscale(1);cursor:progress;pointer-events:none}
   </div>
   </div>
   <div class="hint" id="sigHint">The person who received the money signs below:</div>
+  <div id="sigTurn">↻ Turn the phone sideways for a bigger signing space</div>
   <canvas id="sigPad" width="600" height="260" style="width:100%;border:2px dashed #9CA3AF;border-radius:8px;touch-action:none;background:#fff"></canvas>
   <div class="btns"><button class="grey" onclick="sigClear()">Clear</button><button id="sigSkip" class="grey">No signature</button><button id="sigNo" class="grey">Cancel</button><button id="sigSup" class="out">📤 Send to supervisor</button><button id="sigYes" class="pri">Save</button></div>
 </div></div>
@@ -463,7 +468,7 @@ function tick(){
 }
 setInterval(tick, 1000); tick();
 const RO_FN = /^(serverNow|penHistory|login|getRoster|list|get|notifications|notifOld|photoMap|pushKey|myDocs|myDocGet|profList|profGet|profDocGet|coList|coFileGet|proList|proFeeFile|vacList|dashData|hrMonth|hrSlip|hrMgSlip|adminLive|adminGet|leaveStats|staffInfo|workerView|docReqList|docReqFile|checkOutPreview|tgCheck)/;
-const SLOW_FN = /^(checkIn|checkOut|checkInMany|checkOutMany|checkOutPreview|warnEvidence|mySubmit|mySubmitAll|mySave|profDoc|profPhoto|coFile|proFee|addLeaveDoc|updateSlipsNow|closeMonthNow|preCloseNow|hrMonth|dashData|createSlip|signLsReceipt|addWarning|signWarning|signReq|lsToSup|penSigAdd|penDelDays|setLeaveSalary|addPenalty|addPenaltyDays|hr\w+)$/;
+const SLOW_FN = /^(payList|payTest|payStart|paySup|paySignAdmin|payReopen|payPrint|myPayView|myPaySign|myPayDispute|myPayDownload|checkIn|checkOut|checkInMany|checkOutMany|checkOutPreview|warnEvidence|mySubmit|mySubmitAll|mySave|profDoc|profPhoto|coFile|proFee|addLeaveDoc|updateSlipsNow|closeMonthNow|preCloseNow|hrMonth|dashData|createSlip|signLsReceipt|addWarning|signWarning|signReq|lsToSup|penSigAdd|penDelDays|setLeaveSalary|addPenalty|addPenaltyDays|hr\w+)$/;
 let INFLIGHT = 0; const WAITQ = [];
 call('serverNow', [], t => { OFFSET = t - Date.now(); tick(); });
 
@@ -639,6 +644,54 @@ function tgTest(){ call('tgTest', [PIN], m => toast(m, true)); }
 /* ---- 💼 HR: payroll overview, payslip view, changes, bonus/deduction, increments ---- */
 const hrAed = n => 'AED ' + Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 function hrLoad(){ call('hrMonth', [PIN], hrList); }
+/* ---- 💰 PAYDAY (Haroon 23 Nov): signed salary slips – archive for admins, print for accounts ---- */
+const PAYST = { Ready: ['Not started', '#6B7280'], Waiting: ['⏳ Waiting for signature', '#B26A00'], Signed: ['✅ Signed', '#2E7D32'], Disputed: ['⚠ Says NOT correct', '#C62828'] };
+function payOpen(){ call('payList', [PIN], payDraw); }
+function payDraw(r){
+  window._pay = r;
+  const st = x => { const k = PAYST[x.status] || [x.status, '#C62828']; return '<span style="color:' + k[1] + ';font-weight:600">' + esc(k[0]) + '</span>'; };
+  const q = v => esc(JSON.stringify(v)).replace(/"/g, '&quot;');
+  $('hrB').innerHTML = '<div class="row" style="margin-bottom:6px"><button class="grey sm" onclick="hrClose()">← Back</button><b style="flex:1;font-size:17px">💰 Payday &amp; salary slips</b></div>' +
+    '<div class="card"><div class="hint">When a month closes (on the 1st) every worker\'s slip is kept here. Press <b>Payday</b> when you pay: workers with a PIN sign on their own phone; the others appear on their supervisor\'s card (✍ Sign salary slip). You can also take the signature here. A worker can download his signed slip one time; the archive stays here for admins.</div>' +
+    (r.main ? '<button class="grey sm" style="margin-top:6px" onclick="payTestGo()">🧪 Make a TEST copy from the current slips (' + esc(r.curLabel) + ')</button>' : '') + '</div>' +
+    (!r.months.length ? '<div class="card hint">No slips yet – the first are kept when ' + esc(r.curLabel || 'this month') + ' closes.</div>' :
+    r.months.map((M, mi) => { const n = k => M.rows.filter(x => x.status === k).length, ready = n('Ready'), signed = n('Signed');
+      return '<div class="card"><div class="row"><b style="flex:1">' + esc(M.label) + (M.rows.some(x => x.test) ? ' <span style="color:#C62828">(TEST)</span>' : '') + '</b><span class="hint">' + signed + ' signed · ' + n('Waiting') + ' waiting' + (n('Disputed') ? ' · ' + n('Disputed') + ' not correct' : '') + '</span></div>' +
+        (ready ? '<div class="row" style="margin:6px 0"><button class="in" style="flex:1" onclick="payStartGo(' + mi + ', \'Cash\')">💰 Payday – paid in cash</button><button class="grey" style="flex:1" onclick="payStartGo(' + mi + ', \'Bank\')">🏦 Payday – paid by bank (WPS)</button></div>' : '') +
+        '<div class="row" style="margin:6px 0;flex-wrap:wrap;gap:6px">' + (signed ? '<button class="grey sm" onclick="payPrintM(' + mi + ', true)">🖨 Print signed (' + signed + ')</button>' : '') +
+          '<button class="grey sm" onclick="payPrintM(' + mi + ', false)">🖨 Print all</button>' + (M.stmt ? '<a class="grey sm" style="padding:8px 9px;border-radius:8px;background:#6B7280;color:#fff;text-decoration:none" href="' + esc(M.stmt) + '" target="_blank">📊 Salary Statement (PDF)</a>' : '') + '</div>' +
+        '<table style="width:100%">' + M.rows.map(x => '<tr><td style="padding:5px 0;border-top:1px solid var(--line)">' + av(x.name) + '<b>' + esc(x.name) + '</b> · ' + aed(x.amt) + '<div>' + st(x) +
+          (x.status === 'Signed' ? ' <span class="hint">' + esc(x.by) + ' · ' + esc(x.at) + (x.dl ? ' · downloaded ' + esc(x.dl) : '') + '</span>' : '') + (x.status === 'Disputed' ? '<div class="hint">' + esc(x.note) + '</div>' : '') + '</div></td>' +
+          '<td style="text-align:right;white-space:nowrap;border-top:1px solid var(--line)"><button class="grey xs" onclick="payPrintGo([\'' + x.id + '\'])">🖨</button>' +
+          (/^(Waiting|Disputed)$/.test(x.status) ? ' <button class="out xs" onclick="paySignA(\'' + x.id + '\')">✍</button> <button class="grey xs" title="Send to supervisor" onclick="paySupGo(\'' + x.id + '\')">📤</button>' : '') +
+          (x.status === 'Disputed' ? ' <button class="grey xs" onclick="payReopenGo(\'' + x.id + '\')">↺ Checked</button>' : '') + '</td></tr>').join('') + '</table></div>'; }).join(''));
+  $('hrM').style.display = 'block';
+}
+const payRow = id => { for (const M of window._pay.months) { const x = M.rows.find(z => z.id === id); if (x) return Object.assign({ label: M.label }, x); } return null; };
+function payTestGo(){ ask({ title: '🧪 Test copy', yes: 'Make test copy', en: 'A TEST copy of the current slips (' + window._pay.curLabel + ') is made so you can try Payday. It is marked TEST and is replaced by the real slips when the month closes.' }, () => call('payTest', [PIN], payDraw)); }
+function payStartGo(mi, how){
+  const M = window._pay.months[mi];
+  ask({ title: '💰 Payday – ' + M.label, yes: 'Start Payday', en: 'Start Payday for ' + M.label + ' – paid ' + (how === 'Cash' ? 'in CASH' : 'by BANK (WPS)') + '?\nWorkers with a PIN are told to sign in their app; the others go to their supervisor. The slip says: ' + (how === 'Cash' ? '"I received the above salary in cash".' : '"The salary is paid to my bank account (WPS)".') },
+    () => call('payStart', [PIN, M.m, how], r => { payDraw(r); toast('Payday started – signatures are being collected', true); }));
+}
+function payPrintM(mi, signedOnly){ const M = window._pay.months[mi]; payPrintGo(M.rows.filter(x => !signedOnly || x.status === 'Signed').map(x => x.id)); }
+function paySupGo(id){ const x = payRow(id); call('paySup', [PIN, id], r => { payDraw(r); toast(x.name + ': sent to his supervisor', true); }); }
+function payReopenGo(id){ const x = payRow(id); ask({ title: 'Checked', names: [x.name], yes: 'Ask him to sign again', en: 'You checked what ' + x.name + ' said:\n' + x.note + '\nHe is asked to sign again. (A correction goes as bonus / deduction in the current month.)' }, () => call('payReopen', [PIN, id], payDraw)); }
+function paySignA(id){
+  const x = payRow(id);
+  sign({ worker: x.name, noRcv: true, optional: true, skipText: 'Refused to sign', title: '💰 Salary slip – ' + x.label, hint: x.name + ' signs below to confirm his salary slip:', text: x.label + ' salary: ' + aed(x.amt) }, s => {
+    const go = sig => call('paySignAdmin', [PIN, id, sig], r => { payDraw(r); toast(x.name + (sig ? ': signed' : ': refusal recorded'), true); });
+    if (s.sig) { go(s.sig); return; }
+    ask({ title: 'Refused to sign', names: [x.name], yes: 'Yes, he refused', warn: true, en: 'Record that ' + x.name + ' REFUSED to sign his salary slip?\nYou are recorded as the witness.' }, () => go(''));
+  });
+}
+function payPrintGo(ids){ toast('Preparing the print…', true); call('payPrint', [PIN, ids], printHtml); }
+/** Print a page made by the server (one page per slip). */
+function printHtml(html){
+  const f = document.createElement('iframe'); f.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0'; document.body.appendChild(f);
+  f.onload = () => { setTimeout(() => { try { f.contentWindow.focus(); f.contentWindow.print(); } catch (e) { const w = window.open(''); if (w) { w.document.write(html); w.document.close(); w.print(); } } setTimeout(() => f.remove(), 60000); }, 600); };
+  f.srcdoc = html;
+}
 function hrUpd(){ call('updateSlipsNow', [PIN], m => { toast(m, true); hrLoad(); }); }
 function hrList(r){
   $('hrT').textContent = 'Payroll – ' + r.label;
@@ -707,7 +760,33 @@ function hrDraw(s){
       '<button class="pri sm" style="margin-top:8px" onclick="hrInc()">+ New salary / increment</button></div>';
   $('hrM').style.display = 'block'; $('hrM').scrollTop = 0;
 }
+/** HR → payslip → tap a day (Haroon 22 Nov): who marked it, the leave, its documents, paid / unpaid – then change the day if needed. */
 function hrDay(i){
+  const s = window._hs, d = s.days[i]; window._hsDay = i;
+  call('hrDayInfo', [PIN, s.name, d.ds], x => {
+    if (x.none) return hrEdit(i);
+    const leave = !!x.pay && x.code !== 'EO', pend = x.pay === 'Pending', PAY = { Pending: '⏳ Waiting for your decision', Approved: '✅ Paid', Unpaid: '❌ Unpaid' };
+    const row = (k, v) => v ? '<div class="wrow"><span>' + k + '</span><b>' + esc(String(v)) + '</b></div>' : '';
+    ask({ title: niceD(d.ds) + ' – ' + s.name, yes: '✏ Change this day',
+          en: leave ? (LEAVE[x.code] || x.codeName) + (x.days > 1 ? ' · ' + niceD(x.from) + ' – ' + niceD(x.to) + ' (' + x.days + ' days)' : '') : x.status === 'P' ? 'Present' : (LEAVE[x.status] || x.status || 'Not marked'),
+          html: row('Marked by', x.sup) + row('Check in', x.inT) + row('Check out', x.outT) + (x.inT ? row('Worked', x.worked + ' h') : '') + row('Early out reason', x.why) + row('Flags', x.flags) + row('Notes', x.notes) +
+            (x.pay ? row('Decision', PAY[x.pay] || x.pay) : '') +
+            (leave || x.pay ? '<div style="margin-top:8px">' + (x.docs ? '<button class="grey" style="width:100%" onclick="hrDocs()">📄 View documents (' + x.docs + ' page' + (x.docs > 1 ? 's' : '') + ')</button>' :
+              '<div class="hint">' + (x.needDoc ? '⚠ No supporting document uploaded yet.' : 'No document.') + '</div>') +
+              '<button class="grey sm" style="margin-top:6px" onclick="hrDocAdd()">📎 Upload document</button></div>' : '') +
+            (x.pay ? '<div class="row" style="margin-top:10px"><button class="in" style="flex:1"' + (x.pay === 'Approved' ? ' disabled' : '') + ' onclick="hrDecide(\'Approved\')">✅ Paid</button><button class="out" style="flex:1"' + (x.pay === 'Unpaid' ? ' disabled' : '') + ' onclick="hrDecide(\'Unpaid\')">❌ Unpaid</button></div>' +
+              (pend ? '' : '<div class="hint">Already decided – tap the other button to change it.</div>') : '') },
+      () => hrEdit(i));
+    window._hsX = x;
+  });
+}
+function hrDocs(){ const x = window._hsX, s = window._hs; $('modal').style.display = 'none'; docView({ name: s.name, code: x.code, from: x.from }, true); }
+function hrDocAdd(){ const x = window._hsX, s = window._hs; $('modal').style.display = 'none'; docAdd({ name: s.name, code: x.code, from: x.from, to: x.to, days: x.days, hr: true }); }
+function hrDecide(dec){
+  const x = window._hsX, s = window._hs; $('modal').style.display = 'none';
+  call('decideLeave', [PIN, s.tab, x.code, x.from, x.to, dec, ''], () => { toast(s.name + ': ' + (dec === 'Approved' ? 'paid' : 'unpaid') + ' – payslip updates in about a minute', true); hrOpen(s.name); });
+}
+function hrEdit(i){
   const s = window._hs, d = s.days[i];
   ask({ title: niceD(d.ds) + ' – ' + s.name, yes: 'Save change',
         en: (d.note ? 'Note: ' + d.note + '\n' : '') + 'Normal: P, H, SL, EL, WL, AV, L or hours (e.g. 7). Overtime: hours.',
@@ -840,7 +919,7 @@ function render(d){
         '<option value="">' + (w.outT ? 'Checked out' : w.inT ? 'Active' : absent ? esc(LEAVE[w.status] || w.status) : lv ? esc(LEAVE[lv.code] || lv.code) : 'Present') + '</option>' + (locked && !isVac ? '<option value="P">✓ Present – he came to work</option>' : '') + LEAVE_OPTS +
       '</select><button class="grey sm" onclick="adv(' + i + ')">+ Advance</button>' + (lv ? '' : '<button class="grey sm" id="lvb' + i + '" onclick="lvT(' + i + ')">▸ Leave</button>') + '<button class="grey sm" style="margin-left:auto" onclick="penW(' + i + ')">⏱ Penalty</button><button class="grey sm" onclick="noteW(' + i + ')">📝 Note</button><button class="warnb' + (w.warn >= 5 ? ' hot' : '') + '" style="margin-left:auto" title="Warnings this month – tap to give a warning" onclick="warnW(' + i + ')">⚠ ' + (w.warn || 0) + '</button></div>' +
       (w.wsign && w.wsign.length ? '<div class="row" style="margin-top:6px">' + w.wsign.map((x, k) => '<button class="out" onclick="wsSign(' + i + ',' + k + ')">✍ Sign warning – ' + esc(x.reason.slice(0, 30)) + '</button>').join('') + '</div>' : '') +
-      (w.sreq && w.sreq.length ? '<div class="row" style="margin-top:6px">' + w.sreq.map((x, k) => '<button class="out" onclick="srSign(' + i + ',' + k + ')">✍ Sign ' + (x.kind === 'ls' ? 'leave salary' : 'penalty') + ' – ' + esc(x.text.replace(/^⏱ /, '').slice(0, 30)) + '</button>').join('') + '</div>' : '') +
+      (w.sreq && w.sreq.length ? '<div class="row" style="margin-top:6px">' + w.sreq.map((x, k) => '<button class="out" onclick="srSign(' + i + ',' + k + ')">✍ Sign ' + (x.kind === 'ls' ? 'leave salary' : x.kind === 'pay' ? 'salary slip' : 'penalty') + ' – ' + esc(x.text.replace(/^⏱ /, '').slice(0, 30)) + '</button>').join('') + '</div>' : '') +
       (isVac ? '<div class="row" style="margin-top:6px"><button class="in" onclick="vacAllowW(' + i + ')">✅ Allow check-in</button><button class="grey" onclick="vacExtW(' + i + ')">➕ Extend vacation</button></div>' : '') +
       (window._pend || []).map((p, k) => p.name === w.name ? '<div class="certb">⏳ ' + esc(LEAVE[p.code]) + ' ' + niceD(p.from) + (p.days > 1 ? '–' + niceD(p.to) : '') + ' waiting for admin · <button class="grey sm" onclick="docAdd(window._pend[' + k + '])">📎 ' + (p.docs ? 'Add page (' + p.docs + ' saved)' : 'Upload supporting document') + '</button></div>' : '').join('') +
       (lv ? '' : '<div class="lvp" id="lvp' + i + '"><button class="grey" onclick="vac(' + i + ',\'AV\')">✈ Annual vacation</button><button class="grey" onclick="vac(' + i + ',\'EL\')">Emergency leave</button></div>') +
@@ -1054,9 +1133,9 @@ function penSig(name, txt, go){
 }
 /* ---- ✍ supervisor takes a waiting signature (penalty / leave salary) that an admin sent him ---- */
 function srSign(i, k){
-  const w = window._list[i], x = w.sreq[k], ls = x.kind === 'ls';
-  sign({ worker: w.name, noRcv: !ls, optional: !ls, skipText: 'Refused to sign', title: '✍ ' + (ls ? 'Leave salary' : 'Penalty') + ' – signature',
-         hint: ls ? 'The person who received the money signs below:' : w.name + ' signs below to acknowledge this penalty (given by ' + x.by + '):', text: x.text }, s => {
+  const w = window._list[i], x = w.sreq[k], ls = x.kind === 'ls', py = x.kind === 'pay';
+  sign({ worker: w.name, noRcv: !ls, optional: !ls, skipText: 'Refused to sign', title: '✍ ' + (ls ? 'Leave salary' : py ? 'Salary slip' : 'Penalty') + ' – signature',
+         hint: ls ? 'The person who received the money signs below:' : py ? w.name + ' signs below to confirm his salary slip:' : w.name + ' signs below to acknowledge this penalty (given by ' + x.by + '):', text: x.text }, s => {
     const go = sig => call('signReq', [PIN, x.id, sig, s.by || '', s.photo || ''], d => { render(d); toast(w.name + (sig ? ': signature saved' : ': refusal recorded'), true); });
     if (s.sig) { go(s.sig); return; }
     ask({ title: 'Refused to sign', names: [w.name], yes: 'Yes, he refused', warn: true, en: 'Record that ' + w.name + ' REFUSED to sign?\nYou are recorded as the witness.' }, () => go(''));
@@ -1317,8 +1396,8 @@ function sign(o, done, cancel){
   document.querySelector('input[name=rcv][value=W]').checked = true; $('sigOther').style.display = 'none'; $('sigOther').value = '';
   PHOTO = ''; $('sigPh').style.display = 'none'; $('sigPhImg').style.display = 'none'; $('sigCam').value = '';
   $('sigSkip').style.display = o.optional ? '' : 'none';
-  $('sigM').style.display = 'flex'; sigClear();
-  const close = () => { $('sigM').style.display = 'none'; };
+  $('sigM').style.display = 'flex'; sigClear(); sigBig(true);
+  const close = () => { $('sigM').style.display = 'none'; sigBig(false); };
   $('sigNo').onclick = () => { close(); if (cancel) cancel(); };
   $('sigSkip').onclick = () => { close(); done({ by: '', sig: '' }); };
   $('sigSup').style.display = o.sup ? '' : 'none';   // admin: the worker is not here – his supervisor takes it (he is told)
@@ -1355,7 +1434,20 @@ function phTake(inp){
   img.src = url;
 }
 /** Signature saved at half size so it fits in one sheet cell. */
-function sigSmall(){ const c = $('sigPad'), s = document.createElement('canvas'); s.width = 300; s.height = 130; s.getContext('2d').drawImage(c, 0, 0, 300, 130); return s.toDataURL('image/png'); }
+function sigSmall(){ const c = $('sigPad'), s = document.createElement('canvas'); s.width = 360; s.height = Math.max(90, Math.min(240, Math.round(360 * c.height / c.width))); s.getContext('2d').drawImage(c, 0, 0, s.width, s.height); return s.toDataURL('image/png'); }
+/* Haroon 23 Nov: the signature pad fills the screen; the phone turns sideways where it can (Android); the pad follows the screen size. */
+function sigBig(on){
+  try { if (on) { const d = document.documentElement; if (d.requestFullscreen && !document.fullscreenElement) d.requestFullscreen({ navigationUI: 'hide' }).then(() => screen.orientation && screen.orientation.lock && screen.orientation.lock('landscape').catch(() => {})).catch(() => {}); }
+        else { if (screen.orientation && screen.orientation.unlock) screen.orientation.unlock(); if (document.fullscreenElement && document.exitFullscreen) document.exitFullscreen().catch(() => {}); } } catch (e) {}
+  if (on) [50, 400, 900].forEach(t => setTimeout(sigFit, t));
+}
+function sigFit(){   // canvas pixels = its size on screen (a signature already drawn is kept)
+  const c = $('sigPad'); if ($('sigM').style.display === 'none') return; const r = c.getBoundingClientRect(); if (!r.width || !r.height) return;
+  const w = Math.round(r.width), h = Math.round(r.height); if (c.width === w && c.height === h) return;
+  const old = SIG_DIRTY ? c.toDataURL() : null; c.width = w; c.height = h; const x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, w, h);
+  if (old) { const im = new Image(); im.onload = () => x.drawImage(im, 0, 0, w, h); im.src = old; }
+}
+window.addEventListener('resize', () => setTimeout(sigFit, 150));
 function sigClear(){ const c = $('sigPad'), x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height); SIG_DIRTY = false; }
 (function(){
   const c = $('sigPad'), x = c.getContext('2d'); let down = false, last = null;
@@ -1485,15 +1577,50 @@ function wkDraw(v){
       '<div class="wrow"><span><b>Total so far</b></span><b>' + wAed(s.gross) + '</b></div>' + (v.loanLeft ? '<div class="hint">Loan still to repay: ' + wAed(v.loanLeft) + '</div>' : ''));
   } else h += '<div class="card">Your payslip is not ready yet – ask the office.</div>';
   const lv = v.leave ? '<div class="wrow"><span>' + esc(v.leave.type) + ' booked</span><span>' + niceD(v.leave.from) + ' – back ' + niceD(v.leave.ret) + '</span></div>' : '';
+  if (v.pays && v.pays.length) h += '<div class="card" style="border-left:5px solid #2E7D32"><b>💰 Salary slip</b>' + v.pays.map((p, k) => '<div class="wrow" style="align-items:center;gap:6px"><span>' + esc(p.label) + '<br><b>' + wAed(p.amt) + '</b>' +
+      (p.status === 'Disputed' ? '<div class="hint">You said: ' + esc(p.note) + ' – the office is checking.</div>' : p.status === 'Signed' ? '<div class="hint">✅ Signed. You can download it ONE time.</div>' : '<div class="hint">Check it and sign.</div>') + '</span><span style="text-align:right">' +
+      (p.status === 'Waiting' ? '<button class="pri sm" onclick="wkPay(' + k + ')">📄 Open &amp; sign</button>' : p.status === 'Signed' ? '<button class="grey sm" onclick="wkPayDl(' + k + ')">⬇ Download</button>' : '') + '</span></div>').join('') + '</div>';
   h += card('Leave', lv + (v.reqs.length ? v.reqs.map(q => '<div class="wrow" style="align-items:center;gap:6px"><span>' + esc(q.type) + '<br><span class="hint">' + rqDays(q) + (q.note ? ' · ' + esc(q.note) : '') + '</span></span><span style="text-align:right">' + rqState(q) +
       (!q.dec ? '<br><button class="grey sm" style="margin-top:4px" onclick="wkCancel(\'' + esc(q.id) + '\')">Cancel</button>' : '') + '</span></div>').join('') : (lv ? '' : '<div class="hint">No leave requested.</div>')) +
     '<button class="pri" style="width:100%;margin-top:8px" onclick="wkReq()">📝 Request leave</button>');
-  if (v.pend.length) h += card('Waiting for admin', v.pend.map(p => '<div class="wrow"><span>' + esc(RQ_T[p.code] || LEAVE[p.code] || p.code) + '</span><span>' + niceD(p.from) + (p.days > 1 ? ' – ' + niceD(p.to) : '') + '</span></div>').join(''));
+  if (v.pend.length) h += '<details class="card"' + (v.pend.some(p => p.need && !p.docs) ? ' open style="border-left:5px solid #F59E0B"' : '') + '><summary style="cursor:pointer;font-weight:bold">Waiting for admin' + (v.pend.some(p => p.need && !p.docs) ? ' – 📎 document needed' : '') + '</summary>' +
+    v.pend.map((p, k) => '<div class="wrow" style="align-items:center;gap:6px"><span>' + esc(RQ_T[p.code] || LEAVE[p.code] || p.code) + '<br><span class="hint">' + niceD(p.from) + (p.days > 1 ? ' – ' + niceD(p.to) : '') +
+      (p.need ? ' · ' + (p.docs ? '📄 ' + p.docs + ' page(s) sent' : '<b class="due">document needed</b>') : '') + '</span></span>' +
+      (p.need ? '<button class="' + (p.docs ? 'grey' : 'pri') + ' sm" onclick="wkDoc(' + k + ')">📎 ' + (p.docs ? 'Add page' : 'Upload document') + '</button>' : '') + '</div>').join('') +
+    (v.pend.some(p => p.need) ? '<div class="hint">Sick or emergency leave: take a photo of your medical certificate or other paper. Your supervisor and the office are told; the office decides paid or unpaid.</div>' : '') + '</details>';
   h += card('Warnings and penalties – ' + esc(v.label), (v.warns.length || v.pens.length ? v.warns.map(w => '<div class="wrow"><span>⚠ ' + niceD(w.ds) + ' – ' + esc(w.reason) + '</span><span class="hint">' + esc(w.by) + '</span></div>').join('') +
     v.pens.map(p => '<div class="wrow"><span>⏱ Penalty ' + niceD(p.ds) + '</span><b style="color:var(--red)">−' + p.hrs + ' h</b></div>').join('') : '<div class="hint">None this month. 👍</div>'));
   h += '<div class="hint" style="text-align:center;margin:10px 0 24px">🔒 View only – if something is wrong, tell your supervisor.</div>';
   $('wkB').innerHTML = h;
 }
+/** 💰 Worker: his salary slip – read it, sign it on the phone, or say it is not correct. */
+function wkPay(k){
+  const p = window._wk.pays[k];
+  call('myPayView', [PIN, p.id], html => {
+    $('hrB').innerHTML = '<div class="row" style="margin-bottom:6px"><button class="grey sm" onclick="$(\'hrM\').style.display=\'none\'">← Back</button><b style="flex:1">💰 ' + esc(p.label) + '</b></div>' +
+      '<div style="background:#fff;border-radius:8px;overflow:auto">' + html + '</div>' +
+      '<div class="row" style="margin-top:10px"><button class="in" style="flex:2" onclick="wkPaySign(' + k + ')">✍ ' + (/bank/i.test(p.method) ? 'Correct – sign' : 'I received it – sign') + '</button><button class="out" style="flex:1" onclick="wkPayNo(' + k + ')">✗ Not correct</button></div>';
+    $('hrM').style.display = 'block'; $('hrM').scrollTop = 0;
+  });
+}
+function wkPaySign(k){
+  const p = window._wk.pays[k];
+  sign({ worker: window._wk.name, noRcv: true, title: '💰 Salary slip – ' + p.label, hint: 'Sign below with your finger:', text: (/bank/i.test(p.method) ? 'I accept this payslip. My salary of ' + wAed(p.amt) + ' is paid to my bank account.' : 'I received my salary of ' + wAed(p.amt) + ' in cash.') },
+    s => call('myPaySign', [PIN, p.id, s.sig], v => { $('hrM').style.display = 'none'; wkDraw(v); toast('Thank you – signed', true); }));
+}
+function wkPayNo(k){
+  const p = window._wk.pays[k];
+  ask({ title: '✗ Not correct', yes: 'Send to the office', txt: 'What is not correct? (required)', txtReq: true, txtMsg: 'Write what is not correct', en: 'Your slip is not signed. The office and your supervisor are told and will check it.' },
+    f => call('myPayDispute', [PIN, p.id, f.txt], v => { $('hrM').style.display = 'none'; wkDraw(v); toast('Sent – the office will check it', true); }));
+}
+function wkPayDl(k){
+  const p = window._wk.pays[k];
+  ask({ title: '⬇ Download – one time only', yes: 'Download now', en: 'You can download your signed ' + p.label + ' slip ONE time only. Save it on your phone.' },
+    () => call('myPayDownload', [PIN, p.id], f => { const b = atob(f.data.split(',')[1]), u8 = new Uint8Array(b.length); for (let i = 0; i < b.length; i++) u8[i] = b.charCodeAt(i);
+      const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([u8], { type: 'application/pdf' })); a.download = f.name; document.body.appendChild(a); a.click(); a.remove(); wkLoad(); toast('Saved', true); }));
+}
+/** Worker uploads the paper of his own sick / emergency leave (Haroon 22 Nov). */
+function wkDoc(k){ const p = window._wk.pend[k]; docAdd({ name: window._wk.name, code: p.code, from: p.from, to: p.to, days: p.days }); }
 function wkDay(ds){
   const d = window._wk.slip.days.find(x => x.ds === ds); if (!d) return;
   const n = String(d.n), w = { P: 'Full day – paid', H: 'Sunday', L: 'Unpaid', AV: 'Annual vacation (not paid)', SL: 'Sick leave – paid', EL: 'Emergency leave – paid', WL: 'Leave – paid' };
@@ -2193,7 +2320,8 @@ function docTake(inp){
     }
     if (out.length >= 550000) { toast('Photo too large – try again', false); return; }
     toast('Uploading certificate…', true);
-    call('addLeaveDoc', [PIN, p.name, p.from, p.code, out], r => { toast('Certificate saved for ' + p.name, true); if (r && r.list) render(r); else apLoad(); });
+    if (window._role === 'WORKER') { call('myLeaveDoc', [PIN, p.from, p.code, out], v => { wkDraw(v); toast('Document sent – your supervisor and the office are told', true); }); return; }
+    call('addLeaveDoc', [PIN, p.name, p.from, p.code, out], r => { toast('Certificate saved for ' + p.name, true); if (r && r.list) render(r); else if (p.hr) hrDay(window._hsDay); else apLoad(); });
   };
   img.onerror = () => toast('Could not read the photo', false);
   img.src = url;
@@ -2215,7 +2343,7 @@ function docRotSave(row, btn){
 function docDel(row){
   const p = window._docP;
   ask({ title: 'Delete page', names: [p.name], yes: 'Delete', warn: true, en: 'Delete this certificate page?' },
-    () => call('deleteLeaveDoc', [PIN, p.name, p.from, p.code, row], l => { window._docDraw(l); toast('Page deleted', true); if (window._ap) apLoad(); else refresh(); }));
+    () => call('deleteLeaveDoc', [PIN, p.name, p.from, p.code, row], l => { window._docDraw(l); toast('Page deleted', true); if (window._ap) apLoad(); else if (window._role === 'SUP') refresh(); }));
 }
 function apDo(k, dec){
   const p = window._ap[k], note = $('apN' + k).value.trim();

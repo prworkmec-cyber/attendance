@@ -1,0 +1,282 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>WORKMEC FZE – Gate</title>
+<link rel="icon" href="logo.png">
+<style>
+  :root{--bg:#0b1220;--fg:#f8fafc;--muted:#94a3b8;--green:#16a34a;--blue:#1d4ed8;--red:#dc2626;--amber:#d97706}
+  *{box-sizing:border-box} html,body{margin:0;height:100%;font-family:Segoe UI,Arial,sans-serif;background:var(--bg);color:var(--fg);overflow:hidden;transition:background .25s}
+  body.lit{background:#fff;color:#111}   /* a face is near: the white screen lights it */
+  .hide{display:none!important}
+  button{font:inherit;border:0;border-radius:12px;padding:14px 20px;cursor:pointer;font-weight:600}
+  .pri{background:var(--blue);color:#fff}.grey{background:#475569;color:#fff}.red{background:var(--red);color:#fff}.amber{background:var(--amber);color:#fff}
+  input{font:inherit;padding:12px;border-radius:10px;border:1px solid #64748b;width:100%}
+  #main{position:fixed;inset:0;display:grid;grid-template-rows:auto 1fr auto;gap:8px;padding:12px 18px}
+  #top{display:flex;align-items:center;gap:14px;font-size:22px}
+  #top img{height:40px;background:#fff;border-radius:6px;padding:2px 6px}
+  #clock{font-size:40px;font-weight:700;margin-left:auto;font-variant-numeric:tabular-nums}
+  #net{font-size:16px;color:var(--muted)}
+  #stage{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:22px;align-items:center;min-height:0}
+  #cam{position:relative;width:100%;aspect-ratio:4/3;max-height:100%;border-radius:18px;overflow:hidden;background:#000;justify-self:center}
+  #v{width:100%;height:100%;object-fit:cover;transform:scaleX(-1)}
+  #ring{position:absolute;inset:0;border:8px solid transparent;border-radius:18px;transition:border-color .2s}
+  #ring.ok{border-color:var(--green)} #ring.wait{border-color:var(--amber)} #ring.bad{border-color:var(--red)}
+  #side{display:flex;flex-direction:column;justify-content:center;gap:18px;min-width:0}
+  #msg{font-size:44px;font-weight:700;line-height:1.15}
+  #sub{font-size:24px;color:var(--muted)} body.lit #sub{color:#475569}
+  #card{display:flex;gap:18px;align-items:center;border-radius:18px;padding:18px;background:#0f172a;color:#fff}
+  #card.in{background:var(--green)} #card.out{background:var(--blue)} #card.info{background:#334155}
+  #card img{width:130px;height:130px;object-fit:cover;border-radius:14px;background:#000;transform:scaleX(-1)}
+  #cName{font-size:42px;font-weight:800} #cAct{font-size:30px;font-weight:700} #cNote{font-size:20px;opacity:.9}
+  #bottom{display:flex;gap:12px;align-items:center}
+  #bottom .early{font-size:22px;padding:16px 24px} #gear{margin-left:auto;background:transparent;color:var(--muted);font-size:26px}
+  .pane{position:fixed;inset:0;background:#0f172a;color:#fff;z-index:20;overflow:auto;padding:24px}
+  .box{max-width:760px;margin:0 auto}
+  .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  table{width:100%;border-collapse:collapse} td{padding:10px 6px;border-bottom:1px solid #334155;font-size:18px}
+  .hint{color:var(--muted);font-size:16px}
+  .big{font-size:22px}
+  #reasons button{flex:1 1 40%;font-size:22px;padding:20px}
+</style></head><body>
+
+<!-- first time: this laptop becomes the gate kiosk -->
+<div id="setup" class="pane hide"><div class="box">
+  <img src="logo.png" alt="WORKMEC" style="height:60px;background:#fff;border-radius:8px;padding:4px 10px">
+  <h1>Gate kiosk – set up</h1>
+  <p class="hint">Haroon types his PIN once. This laptop then works as the gate kiosk: workers look at the camera to check in and out.</p>
+  <input id="sPin" type="password" inputmode="numeric" autocomplete="off" placeholder="Haroon's PIN">
+  <div class="row" style="margin-top:12px"><button class="pri" onclick="setupGo()">Set up this laptop</button></div>
+  <p id="sErr" style="color:#f87171"></p>
+</div></div>
+
+<div id="main" class="hide">
+  <div id="top"><img src="logo.png" alt="WORKMEC"><b>Attendance</b><span id="net"></span><span id="clock">--:--</span></div>
+  <div id="stage">
+    <div id="cam"><video id="v" autoplay muted playsinline></video><div id="ring"></div></div>
+    <div id="side">
+      <div id="msg">Starting…</div>
+      <div id="sub"></div>
+      <div id="card" class="hide"><img id="cImg" alt=""><div style="flex:1;min-width:0"><div id="cName"></div><div id="cAct"></div><div id="cNote"></div></div>
+        <button id="undo" class="grey big" onclick="undo()">Not me – undo</button></div>
+    </div>
+  </div>
+  <div id="bottom"><button class="amber early" onclick="earlyAsk()">🏃 Leaving early</button><span class="hint" id="info"></span><button id="gear" onclick="admAsk()" title="Admin">⚙</button></div>
+</div>
+
+<!-- leaving early: reason first, then the face -->
+<div id="early" class="pane hide"><div class="box">
+  <h1>🏃 Leaving early – why?</h1>
+  <div class="row" id="reasons">
+    <button class="pri" onclick="earlyGo('CO')">Sent by company</button><button class="pri" onclick="earlyGo('SL')">Sick</button>
+    <button class="pri" onclick="earlyGo('PL')">Personal (unpaid)</button><button class="pri" onclick="earlyGo('OTHER')">Other</button>
+  </div>
+  <div class="row" style="margin-top:16px"><button class="grey big" onclick="hide('early')">Cancel</button></div>
+</div></div>
+
+<!-- admin: enrol faces, sync, reset -->
+<div id="adm" class="pane hide"><div class="box">
+  <div class="row"><h1 style="flex:1">⚙ Kiosk admin</h1><button class="grey" onclick="admClose()">Close</button></div>
+  <div id="admLogin"><p class="hint">Admin PIN (asked each time – not kept on the laptop).</p>
+    <input id="aPin" type="password" inputmode="numeric" autocomplete="off" placeholder="Admin PIN">
+    <div class="row" style="margin-top:12px"><button class="pri" onclick="admOpen()">Open</button></div><p id="aErr" style="color:#f87171"></p></div>
+  <div id="admBody" class="hide">
+    <div class="row" style="margin-bottom:10px"><button class="pri" onclick="sync(true)">⟳ Sync now</button><span class="hint" id="admQ"></span></div>
+    <p class="hint">Enrol = the worker stands in front of the camera and turns his head a little; 5 face prints are taken. Only the face print (numbers) and one small photo are kept.</p>
+    <table id="admL"></table>
+    <div class="row" style="margin-top:22px"><button class="red" onclick="kReset()">Remove kiosk setup from this laptop</button></div>
+  </div>
+</div></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.15/dist/face-api.js"></script>
+<script>
+const API = 'https://script.google.com/macros/s/AKfycbyC0FR05RyxhMxK1loRqrLZWp_hDt6FXX2T3Hf7fevP0itNdxwZasc7200WkermL-PsyA/exec';
+const MODELS = window.FA_MODELS || 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.15/model/';
+/* Haroon 23–24 Nov rules (minutes): check-in 60 before → 240 after shift start; check-out 30 before → 360 after shift end;
+   the same person is ignored 30 min after a punch; 5 s to undo; shifts are 12 h. */
+const R = { inBefore: 60, inAfter: 240, outBefore: 30, outAfter: 360, cool: 30, undo: 5, shiftH: 12 };
+const MATCH = 0.5, CLOSE = 0.17, LIVE = !window.KIOSK_NOLIVE;   // distance limit, face width ÷ picture width, blink check
+const $ = id => document.getElementById(id), show = id => $(id).classList.remove('hide'), hide = id => $(id).classList.add('hide');
+const ls = { get: (k, d) => { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } }, set: (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} } };
+const DEV = (() => { try { let d = localStorage.getItem('wmDev'); if (!d) { d = Math.random().toString(36).slice(2) + Date.now().toString(36); localStorage.setItem('wmDev', d); } return d; } catch (e) { return 'kiosk'; } })();
+let TOK = ls.get('wmKioskTok', ''), D = ls.get('wmKioskData', null), OFFSET = ls.get('wmKioskOff', 0), MATCHER = null, ROWS = {}, WK = {};
+let LAST = ls.get('wmKioskLast', {}), Q = ls.get('wmKQ', []), PEND = null, EARLY = null, ENROL = null, ADMPIN = '', IGN = {};
+
+/* ---- server ---- */
+async function call(fn, args){
+  const ctl = new AbortController(), tm = setTimeout(() => ctl.abort(), 60000);
+  try { const r = await fetch(API, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ fn: fn, args: args, tok: '', dev: DEV }), signal: ctl.signal }).then(x => x.json());
+    if (!r.ok) throw new Error(r.error || 'Error'); return r.data; } finally { clearTimeout(tm); }
+}
+const now = () => Date.now() + OFFSET;
+/* Dubai time (UTC+4, no summer time) */
+const dub = t => new Date(t + 4 * 3600e3);
+const ymd = t => dub(t).toISOString().slice(0, 10), hm = t => dub(t).toISOString().slice(11, 16);
+function shiftDate(shift, t){ return shift === 'NIGHT' && dub(t).getUTCHours() < 12 ? ymd(t - 864e5) : ymd(t); }
+function startAt(ds, shift){ const [h, m] = String((D && D.start && D.start[shift]) || (shift === 'NIGHT' ? '18:00' : '06:00')).split(':').map(Number);
+  const [y, mo, d] = ds.split('-').map(Number); return Date.UTC(y, mo - 1, d, h, m) - 4 * 3600e3; }
+
+/* ---- data: kept on the laptop, refreshed every 5 minutes ---- */
+function useData(d){
+  D = d; WK = {}; ROWS = {};
+  d.workers.forEach(w => { WK[w.name] = w; });
+  d.rows.forEach(r => { ROWS[r.name + '|' + r.ds] = { st: r.st, inAt: r.inAt, outAt: r.outAt }; });
+  Q.forEach(applyLocal);   // punches still waiting to be sent count already
+  const L = Object.keys(d.faces || {}).filter(n => WK[n] && d.faces[n].length).map(n => new faceapi.LabeledFaceDescriptors(n, d.faces[n].map(a => new Float32Array(a))));
+  MATCHER = L.length ? new faceapi.FaceMatcher(L, MATCH) : null;
+  $('info').textContent = L.length + ' of ' + d.workers.length + ' workers enrolled';
+  if (!$('adm').classList.contains('hide') && ADMPIN) admDraw();
+}
+async function sync(manual){
+  try { const d = await call('kioskData', ['T:' + TOK]); OFFSET = d.now - Date.now(); ls.set('wmKioskOff', OFFSET); ls.set('wmKioskData', d); useData(d); if (manual) say('Up to date', '', 'info'); }
+  catch (e) { if (/SESSION_ENDED|Kiosk login/.test(e.message)) { TOK = ''; ls.set('wmKioskTok', ''); location.reload(); } else if (manual) say('No connection', e.message, 'info'); }
+  netShow();
+}
+function applyLocal(p){ const w = WK[p.name]; if (!w) return; const k = p.name + '|' + shiftDate(w.shift, p.at), r = ROWS[k] = ROWS[k] || {}; if (p.kind === 'in') r.inAt = p.at; else r.outAt = p.at; }
+
+/* ---- the rules: what to do when this person looks at the camera ---- */
+function decide(name){
+  const w = WK[name]; if (!w) return { msg: 'Not on the staff list' };
+  const t = now(), ds = shiftDate(w.shift, t), r = ROWS[name + '|' + ds] || {}, st = startAt(ds, w.shift), en = st + R.shiftH * 3600e3;
+  if ((r.st && r.st !== 'P') || (w.leave && ds >= w.from && (!w.ret || ds < w.ret))) return { msg: 'On leave today', note: 'Ask your supervisor' };
+  if (LAST[name] && t - LAST[name] < R.cool * 60e3) return { msg: r.outAt ? 'Checked out at ' + hm(r.outAt) : 'Checked in at ' + hm(r.inAt || LAST[name]), note: 'Already done ✓' };
+  if (!r.inAt) {
+    if (t >= st - R.inBefore * 60e3 && t <= st + R.inAfter * 60e3) return { kind: 'in' };
+    return { msg: 'Not your check-in time', note: w.shift + ' shift – check-in from ' + hm(st - R.inBefore * 60e3) + '. Ask your supervisor.' };
+  }
+  if (!r.outAt) {
+    if (EARLY && t < EARLY.until) return { kind: 'out', reason: EARLY.reason };
+    if (t >= en - R.outBefore * 60e3 && t <= en + R.outAfter * 60e3) return { kind: 'out' };
+    if (t > en + R.outAfter * 60e3) return { msg: 'Check-out time is over', note: 'Ask your supervisor' };
+    return { msg: 'In since ' + hm(r.inAt), note: 'Check-out from ' + hm(en - R.outBefore * 60e3) + ' · going home early? Tap 🏃 first' };
+  }
+  return { msg: 'Checked out at ' + hm(r.outAt), note: 'See you next shift' };
+}
+
+/* ---- screen ---- */
+let SAY_T = null;
+function say(m, sub, cls, keep){ $('msg').textContent = m; $('sub').textContent = sub || ''; clearTimeout(SAY_T); if (!keep) SAY_T = setTimeout(() => { $('msg').textContent = EARLY ? '🏃 Leaving early – look at the camera' : 'Look at the camera'; $('sub').textContent = ''; }, 3500); }
+function speak(t){ try { const u = new SpeechSynthesisUtterance(t); u.rate = 1; speechSynthesis.cancel(); speechSynthesis.speak(u); } catch (e) {} }
+function netShow(){ $('net').textContent = (navigator.onLine ? '' : '📵 offline · ') + (Q.length ? '⏳ ' + Q.length + ' waiting to send' : ''); if ($('admQ')) $('admQ').textContent = Q.length ? Q.length + ' punch(es) waiting to send' : 'All punches sent'; }
+setInterval(() => { $('clock').textContent = hm(now()); }, 1000);
+function snap(box){   // small photo of the face for the record
+  const v = $('v'), c = document.createElement('canvas'), s = 180; c.width = s; c.height = s;
+  const pad = box.width * 0.35, x = Math.max(0, box.x - pad), y = Math.max(0, box.y - pad), w = Math.min(v.videoWidth - x, box.width + 2 * pad), h = Math.min(v.videoHeight - y, box.height + 2 * pad);
+  c.getContext('2d').drawImage(v, x, y, w, h, 0, 0, s, s); return c.toDataURL('image/jpeg', 0.7);
+}
+function cardShow(cls, name, act, note, img, canUndo){
+  const c = $('card'); c.className = cls; $('cName').textContent = name; $('cAct').textContent = act; $('cNote').textContent = note || ''; $('cImg').src = img || ''; $('cImg').style.display = img ? '' : 'none';
+  $('undo').style.display = canUndo ? '' : 'none';
+}
+
+/* ---- a punch: shown at once, kept 5 s for "Not me", then saved on the laptop and sent in the background ---- */
+function punch(name, dec, box, dist){
+  const p = { id: Math.random().toString(36).slice(2), name: name, kind: dec.kind, at: now(), reason: dec.reason || '', photo: snap(box), dist: Math.round(dist * 1000) / 1000 };
+  const early = dec.reason ? ' (leaving early)' : '';
+  cardShow(dec.kind, name, (dec.kind === 'in' ? 'CHECK IN ✓ ' : 'CHECK OUT ✓ ') + hm(p.at) + early, 'Not you? Tap "Not me" within ' + R.undo + ' seconds', p.photo, true);
+  say(dec.kind === 'in' ? 'Welcome' : 'Goodbye', '', '', true);
+  speak((dec.kind === 'in' ? 'Check in, ' : 'Check out, ') + name);
+  LAST[name] = p.at;   // no second punch while the card is up
+  PEND = { p: p, t: setTimeout(() => commit(p), R.undo * 1000) };
+  if (dec.reason) EARLY = null;
+}
+function commit(p){
+  PEND = null; Q.push(p); ls.set('wmKQ', Q); applyLocal(p); ls.set('wmKioskLast', LAST);
+  setTimeout(() => hide('card'), 1500); say('Look at the camera', ''); netShow(); flush();
+}
+function undo(){
+  if (!PEND) return; clearTimeout(PEND.t); delete LAST[PEND.p.name]; IGN[PEND.p.name] = now() + 8000; PEND = null;
+  cardShow('info', 'Cancelled', 'Nothing was saved', 'Look at the camera again', '', false); setTimeout(() => hide('card'), 2500); say('Cancelled', 'Try again or ask your supervisor');
+}
+let FLUSHING = false;
+async function flush(){
+  if (FLUSHING || !Q.length || !TOK) return; FLUSHING = true;
+  try { while (Q.length) { const p = Q[0]; await call('kioskPunch', ['T:' + TOK, p]); Q.shift(); ls.set('wmKQ', Q); netShow(); } }
+  catch (e) { if (/SESSION_ENDED|Kiosk login/.test(e.message)) { TOK = ''; ls.set('wmKioskTok', ''); } }   // no internet: kept, tried again
+  finally { FLUSHING = false; netShow(); }
+}
+setInterval(flush, 10000); window.addEventListener('online', () => { flush(); sync(); }); window.addEventListener('offline', netShow);
+
+/* ---- face loop ---- */
+const ear = pts => { const d = (a, b) => Math.hypot(a.x - b.x, a.y - b.y); return (d(pts[1], pts[5]) + d(pts[2], pts[4])) / (2 * d(pts[0], pts[3])); };
+let HIST = [], EYES = [], NOFACE = 0, BUSY = false;
+async function tick(){
+  const v = $('v'); if (!v.videoWidth) return;
+  const all = await faceapi.detectAllFaces(v, new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.5 })).withFaceLandmarks().withFaceDescriptors();
+  const t = now();
+  if (!all.length) { if (++NOFACE > 8) { document.body.classList.remove('lit'); $('ring').className = ''; HIST = []; EYES = []; } return; }
+  NOFACE = 0; document.body.classList.add('lit');
+  const f = all.sort((a, b) => b.detection.box.width - a.detection.box.width)[0], box = f.detection.box;
+  if (ENROL) return enrolTake(f, box);
+  if (box.width / v.videoWidth < CLOSE) { $('ring').className = 'wait'; if (!PEND) say('Come closer', 'Stand in front of the camera', '', true); return; }
+  if (!MATCHER) { $('ring').className = 'bad'; say('No faces enrolled yet', 'Admin: ⚙ → Enrol'); return; }
+  const m = MATCHER.findBestMatch(f.descriptor), name = m.label === 'unknown' ? '' : m.label;
+  const lm = f.landmarks.positions; EYES.push({ t: t, e: (ear(lm.slice(36, 42)) + ear(lm.slice(42, 48))) / 2 }); EYES = EYES.filter(x => t - x.t < 6000);
+  HIST.push({ t: t, n: name, d: m.distance }); HIST = HIST.filter(x => t - x.t < 6000);
+  if (PEND) return;
+  const same = HIST.length >= 2 && HIST.slice(-2).every(x => x.n === HIST[HIST.length - 1].n);   // 2 matching looks in a row (slow laptops too)
+  if (!same) { $('ring').className = 'wait'; return; }
+  if (!name) { $('ring').className = 'bad'; say('Not recognised', 'Look straight at the camera – or ask your supervisor', '', true); return; }
+  if (IGN[name] && t < IGN[name]) return;
+  const blinked = !LIVE || (EYES.some(x => x.e > 0.26) && EYES.some(x => x.e < 0.21));
+  const dec = decide(name);
+  if (!dec.kind) { $('ring').className = 'ok'; cardShow('info', name, dec.msg, dec.note, '', false); show('card'); IGN[name] = t + 6000; setTimeout(() => { if (!PEND) hide('card'); }, 5000); return; }
+  if (!blinked) { $('ring').className = 'wait'; say('Blink your eyes, ' + name, 'So the camera knows you are really here', '', true); return; }
+  $('ring').className = 'ok'; show('card'); punch(name, dec, box, m.distance); HIST = []; EYES = [];
+}
+async function loop(){ if (!BUSY) { BUSY = true; try { await tick(); } catch (e) { console.log(e); } BUSY = false; } setTimeout(loop, 80); }
+
+/* ---- leaving early ---- */
+function earlyAsk(){ show('early'); }
+function earlyGo(r){ hide('early'); EARLY = { reason: r, until: now() + 30000 }; say('🏃 Leaving early – look at the camera', 'Within 30 seconds', '', true); setTimeout(() => { if (EARLY && now() >= EARLY.until) { EARLY = null; say('Look at the camera', ''); } }, 31000); }
+
+/* ---- admin on the kiosk ---- */
+function admAsk(){ show('adm'); $('aPin').value = ''; $('aErr').textContent = ''; show('admLogin'); hide('admBody'); ADMPIN = ''; setTimeout(() => $('aPin').focus(), 50); }
+function admClose(){ ADMPIN = ''; ENROL = null; hide('adm'); }
+async function admOpen(){
+  const pin = $('aPin').value.trim(); if (!pin) return;
+  try { await call('kioskForget', ['T:' + TOK, pin, '']); ADMPIN = pin; hide('admLogin'); show('admBody'); admDraw(); netShow(); }   // checks the PIN (removes nobody)
+  catch (e) { $('aErr').textContent = e.message; }
+}
+function admDraw(){
+  const f = (D && D.faces) || {};
+  $('admL').innerHTML = (D ? D.workers : []).slice().sort((a, b) => a.shift.localeCompare(b.shift) || a.name.localeCompare(b.name)).map(w =>
+    '<tr><td><b>' + w.name + '</b> <span class="hint">' + w.shift + '</span></td><td>' + (f[w.name] ? '✅ enrolled' : '<span style="color:#fbbf24">not enrolled</span>') + '</td>' +
+    '<td style="text-align:right"><button class="pri" onclick="enrolStart(\'' + w.name.replace(/'/g, "\\'") + '\')">' + (f[w.name] ? 'Enrol again' : 'Enrol') + '</button>' +
+    (f[w.name] ? ' <button class="grey" onclick="forget(\'' + w.name.replace(/'/g, "\\'") + '\')">Remove</button>' : '') + '</td></tr>').join('');
+}
+function enrolStart(name){ ENROL = { name: name, descs: [], last: 0, photo: '' }; hide('adm'); hide('card'); say('Enrol: ' + name, 'Stand close, look at the camera, turn your head a little left and right', '', true); }
+async function enrolTake(f, box){
+  const v = $('v'), t = Date.now();
+  if (box.width / v.videoWidth < CLOSE) { $('ring').className = 'wait'; say('Enrol: ' + ENROL.name + ' – come closer', 'Stand in front of the camera', '', true); return; }
+  if (t - ENROL.last < 450) return;
+  ENROL.last = t; ENROL.descs.push(Array.from(f.descriptor)); if (!ENROL.photo) ENROL.photo = snap(box);
+  $('ring').className = 'ok'; say('Enrol: ' + ENROL.name + ' – ' + ENROL.descs.length + ' / 5', 'Turn your head a little', '', true);
+  if (ENROL.descs.length >= 5) {
+    const e = ENROL; ENROL = null; say('Saving ' + e.name + '…', '', '', true);
+    try { const d = await call('kioskEnroll', ['T:' + TOK, ADMPIN, e.name, e.descs, e.photo]); ls.set('wmKioskData', d); useData(d); say('✅ ' + e.name + ' enrolled', 'He can now check in with his face'); speak(e.name + ' enrolled'); }
+    catch (er) { say('Not saved', er.message); }
+    show('adm');
+  }
+}
+async function forget(name){ if (!confirm('Remove the face of ' + name + '?')) return; try { const d = await call('kioskForget', ['T:' + TOK, ADMPIN, name]); ls.set('wmKioskData', d); useData(d); admDraw(); } catch (e) { alert(e.message); } }
+function kReset(){ if (!confirm('Remove the kiosk setup from this laptop? Haroon\'s PIN is needed to set it up again.')) return; ls.set('wmKioskTok', ''); location.reload(); }
+
+/* ---- start ---- */
+async function setupGo(){
+  try { const r = await call('kioskStart', [$('sPin').value.trim()]); TOK = r.tok; ls.set('wmKioskTok', TOK); location.reload(); } catch (e) { $('sErr').textContent = e.message; }
+}
+async function start(){
+  if (!TOK) { show('setup'); return; }
+  show('main'); say('Loading face models…', 'First start needs internet', '', true);
+  try { await faceapi.nets.tinyFaceDetector.loadFromUri(MODELS); await faceapi.nets.faceLandmark68Net.loadFromUri(MODELS); await faceapi.nets.faceRecognitionNet.loadFromUri(MODELS); }
+  catch (e) { say('Could not load the face models', 'Check the internet and reload', '', true); return; }
+  if (D) useData(D);
+  try { $('v').srcObject = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } }, audio: false }); }
+  catch (e) { say('Camera not available', 'Allow the camera for this page', '', true); return; }
+  await new Promise(r => $('v').onloadedmetadata = r);
+  say('Look at the camera', '', '', true); loop(); sync(); flush(); setInterval(sync, 5 * 60e3);
+  try { if (navigator.wakeLock) navigator.wakeLock.request('screen').catch(() => {}); document.addEventListener('visibilitychange', () => { if (!document.hidden && navigator.wakeLock) navigator.wakeLock.request('screen').catch(() => {}); }); } catch (e) {}
+}
+start();
+</script>
+</body></html>

@@ -112,6 +112,14 @@
 </div></div>
 
 <!-- admin: enrol faces, sync, reset -->
+<!-- enrolment: check the 5 pictures before saving -->
+<div id="rev" class="pane hide"><div class="box">
+  <h1 id="revT"></h1>
+  <p class="hint big">Check every picture: face clear, no hand or phone in front of it, only this person. Not good? Press Redo.</p>
+  <div id="revI" class="row" style="gap:12px"></div>
+  <div class="row" style="margin-top:18px"><button class="pri big" onclick="revSave()">✓ Save</button><button class="grey big" onclick="revRedo()">↺ Redo</button><button class="grey big" onclick="revCancel()">Cancel</button></div>
+</div></div>
+
 <div id="adm" class="pane hide"><div class="box">
   <div class="row"><h1 style="flex:1">⚙ Kiosk admin</h1><button class="grey" onclick="admClose()">Close</button></div>
   <div id="admLogin"><p class="hint">Admin PIN (asked each time – not kept on the laptop).</p>
@@ -256,7 +264,7 @@ async function tick(){
   if (!all.length) { if (++NOFACE > 8) { document.body.classList.remove('lit'); $('ring').className = ''; silSet(''); HIST = []; EYES = []; } return; }
   NOFACE = 0; document.body.classList.add('lit');
   const f = all.find(x => !fit(x.detection.box)) || all.sort((a, b) => b.detection.box.width - a.detection.box.width)[0], box = f.detection.box;   // the face in the outline wins over a bigger one passing by
-  if (ENROL) return enrolTake(f, box);
+  if (ENROL) return ENROL.review ? undefined : enrolTake(f, box);
   const why = fit(box); silSet(why ? 'bad' : 'ok');   // only a face standing in the outline counts – someone walking past does nothing
   if (why) { $('ring').className = 'wait'; if (!PEND) say(FITMSG[why][0], FITMSG[why][1], '', true); HIST = []; EYES = []; return; }
   if (!MATCHER) { $('ring').className = 'bad'; say('No faces enrolled yet', 'Admin: ⚙ → Enrol'); return; }
@@ -296,7 +304,7 @@ function admDraw(){
     (f[w.name] ? ' <button class="grey" onclick="forget(\'' + w.name.replace(/'/g, "\\'") + '\')">Remove</button>' : '') + '</td></tr>').join('');
 }
 const STEPS = [['front', 'Look straight'], ['left', 'Turn your head a little to one side'], ['right', 'Now a little to the other side'], ['up', 'Lift your chin a little'], ['down', 'Lower your chin a little']];
-function enrolStart(name){ ENROL = { name: name, descs: [], last: 0, t0: Date.now(), photo: '', p0: 0, sgn: 0, psgn: 0 }; hide('adm'); hide('card'); show('eg'); egDraw(); say('Enrol: ' + name, 'Stand inside the outline and follow the picture', '', true); }
+function enrolStart(name){ ENROL = { name: name, descs: [], shots: [], last: 0, t0: Date.now(), p0: 0, sgn: 0, psgn: 0 }; hide('adm'); hide('card'); show('eg'); egDraw(); say('Enrol: ' + name, 'Stand inside the outline and follow the picture', '', true); }
 function egDraw(){
   const n = ENROL ? ENROL.descs.length : 0, st = STEPS[Math.min(n, 4)];
   $('egT').textContent = st[1]; $('egS').textContent = 'Step ' + (n + 1) + ' of 5 – a small move is enough';
@@ -313,6 +321,7 @@ async function enrolTake(f, box){
   const E = ENROL, t = Date.now(), why = fit(box); silSet(why ? 'bad' : 'ok');
   if (why) { $('ring').className = 'wait'; say('Enrol: ' + E.name + ' – ' + FITMSG[why][0], FITMSG[why][1], '', true); return; }
   if (t - E.last < 400) return;
+  if (f.detection.score < (t - E.t0 > 10000 ? 0.65 : 0.8)) { $('ring').className = 'wait'; say('Enrol: ' + E.name + ' – keep your face clear', 'Hands down, nothing in front of the face', '', true); return; }
   if (E.descs.length && faceapi.euclideanDistance(E.descs[0], Array.from(f.descriptor)) > 0.6) { $('ring').className = 'bad'; say('Only ' + E.name + ' in front of the camera', 'Another face was seen', '', true); return; }
   const st = STEPS[E.descs.length][0], p = pose(f.landmarks), late = t - E.t0 > 10000, dy = p.pitch - E.p0;   // after 10 s the step is taken anyway
   let good;
@@ -322,16 +331,30 @@ async function enrolTake(f, box){
   else if (st === 'up') { good = Math.abs(dy) > 0.07; if (good) E.psgn = Math.sign(dy); }
   else good = E.psgn ? dy * E.psgn < -0.07 : Math.abs(dy) > 0.07;
   if (!good && !late) { $('ring').className = 'wait'; say('Enrol: ' + E.name, 'Follow the picture', '', true); return; }
-  E.last = t; E.t0 = t; if (st === 'front') { E.p0 = p.pitch; E.photo = snap(box); }
-  E.descs.push(Array.from(f.descriptor)); if (E.descs.length < 5) egDraw();
+  E.last = t; E.t0 = t; if (st === 'front') E.p0 = p.pitch;
+  E.descs.push(Array.from(f.descriptor)); E.shots.push(snap(box)); if (E.descs.length < 5) egDraw();
   $('ring').className = 'ok'; say('Enrol: ' + E.name + ' – ' + E.descs.length + ' / 5', '', '', true);
-  if (ENROL.descs.length >= 5) {
-    const e = ENROL; ENROL = null; hide('eg'); say('Saving ' + e.name + '…', '', '', true);
-    try { const d = await call('kioskEnroll', ['T:' + TOK, ADMPIN, e.name, e.descs, e.photo]); ls.set('wmKioskData', d); useData(d); say('✅ ' + e.name + ' enrolled', 'He can now check in with his face'); speak(e.name + ' enrolled'); }
-    catch (er) { say('Not saved', er.message); }
-    show('adm');
-  }
+  if (E.descs.length >= 5) { E.review = true; hide('eg'); silSet(''); revShow(); }
 }
+const SHOT_NM = ['Straight', 'Side', 'Other side', 'Chin up', 'Chin down'];
+function revShow(){
+  $('revT').textContent = ENROL.name + ' – check the pictures';
+  $('revI').innerHTML = ENROL.shots.map((u, i) => '<div style="text-align:center"><img src="' + u + '" style="width:140px;height:140px;border-radius:12px;transform:scaleX(-1)"><div class="hint">' + SHOT_NM[i] + '</div></div>').join('');
+  show('rev');
+}
+/** The 5 pictures as one strip (one file in Drive, one link in the FACES tab). */
+function strip(shots){
+  return new Promise(ok => { const c = document.createElement('canvas'), g = c.getContext('2d'); c.width = 180 * shots.length; c.height = 180; let n = 0;
+    shots.forEach((u, i) => { const im = new Image(); im.onload = () => { g.save(); g.translate(180 * i + 180, 0); g.scale(-1, 1); g.drawImage(im, 0, 0, 180, 180); g.restore(); if (++n === shots.length) ok(c.toDataURL('image/jpeg', 0.75)); }; im.src = u; }); });
+}
+async function revSave(){
+  const e = ENROL; ENROL = null; hide('rev'); say('Saving ' + e.name + '…', '', '', true);
+  try { const d = await call('kioskEnroll', ['T:' + TOK, ADMPIN, e.name, e.descs, await strip(e.shots)]); ls.set('wmKioskData', d); useData(d); say('✅ ' + e.name + ' enrolled', 'He can now check in with his face'); speak(e.name + ' enrolled'); }
+  catch (er) { say('Not saved', er.message); }
+  show('adm');
+}
+function revRedo(){ const n = ENROL.name; hide('rev'); enrolStart(n); }
+function revCancel(){ ENROL = null; hide('rev'); show('adm'); }
 async function forget(name){ if (!confirm('Remove the face of ' + name + '?')) return; try { const d = await call('kioskForget', ['T:' + TOK, ADMPIN, name]); ls.set('wmKioskData', d); useData(d); admDraw(); } catch (e) { alert(e.message); } }
 function kReset(){ if (!confirm('Remove the kiosk setup from this laptop? Haroon\'s PIN is needed to set it up again.')) return; ls.set('wmKioskTok', ''); location.reload(); }
 

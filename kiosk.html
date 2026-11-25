@@ -21,6 +21,22 @@
   #v{width:100%;height:100%;object-fit:cover;transform:scaleX(-1)}
   #ring{position:absolute;inset:0;border:8px solid transparent;border-radius:18px;transition:border-color .2s}
   #ring.ok{border-color:var(--green)} #ring.wait{border-color:var(--amber)} #ring.bad{border-color:var(--red)}
+  /* head-and-shoulders outline: outside it is blurred and dark, the person stands inside it */
+  #veil{position:absolute;inset:0;pointer-events:none;backdrop-filter:blur(8px) brightness(.5);-webkit-backdrop-filter:blur(8px) brightness(.5);mask-size:100% 100%;-webkit-mask-size:100% 100%}
+  #sil{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+  #sil path{fill:none;stroke:#fff;stroke-width:3;stroke-dasharray:10 7;transition:stroke .2s}
+  #sil.ok path{stroke:#4ade80;stroke-dasharray:none;stroke-width:4} #sil.bad path{stroke:#fbbf24}
+  /* enrolment guide: a small head shows the move to make */
+  #eg{display:flex;gap:18px;align-items:center;background:#0f172a;color:#fff;border-radius:18px;padding:14px}
+  #eg svg{width:120px;height:120px;flex:none}
+  #egT{font-size:28px;font-weight:700} .dots{display:flex;gap:8px;margin-top:10px} .dots i{width:22px;height:22px;border-radius:50%;background:#334155;display:block}
+  .dots i.done{background:#16a34a} .dots i.now{background:#f59e0b}
+  @keyframes efront{0%,100%{transform:scale(1)}50%{transform:scale(1.06)}}
+  @keyframes eleft{0%,20%,100%{transform:translateX(0)}45%,75%{transform:translateX(-16px)}}
+  @keyframes eright{0%,20%,100%{transform:translateX(0)}45%,75%{transform:translateX(16px)}}
+  @keyframes eup{0%,20%,100%{transform:translateY(0)}45%,75%{transform:translateY(-12px)}}
+  @keyframes edown{0%,20%,100%{transform:translateY(0)}45%,75%{transform:translateY(12px)}}
+  #egFace{transform-box:view-box}
   #side{display:flex;flex-direction:column;justify-content:center;gap:18px;min-width:0}
   #msg{font-size:44px;font-weight:700;line-height:1.15}
   #sub{font-size:24px;color:var(--muted)} body.lit #sub{color:#475569}
@@ -72,8 +88,10 @@
 <div id="main" class="hide">
   <div id="top"><img src="logo.png" alt="WORKMEC"><b>Attendance</b><span id="net"></span><span id="clock">--:--</span></div>
   <div id="stage">
-    <div id="cam"><video id="v" autoplay muted playsinline></video><div id="ring"></div></div>
+    <div id="cam"><video id="v" autoplay muted playsinline></video><div id="ring"></div><div id="veil"></div><svg id="sil" viewBox="0 0 400 300" preserveAspectRatio="none"><path/></svg></div>
     <div id="side">
+      <div id="eg" class="hide"><svg viewBox="0 0 120 120"><ellipse cx="60" cy="62" rx="40" ry="50" fill="#b07a55"/><g id="egFace"><circle cx="46" cy="56" r="5" fill="#111"/><circle cx="74" cy="56" r="5" fill="#111"/><path d="M60 60 L55 76 H64" fill="none" stroke="#5b3a24" stroke-width="3"/><path d="M48 88 Q60 96 72 88" fill="none" stroke="#5b3a24" stroke-width="3"/></g></svg>
+        <div><div id="egT"></div><div class="hint" id="egS" style="font-size:18px"></div><div class="dots" id="egD"></div></div></div>
       <div id="msg">Starting…</div>
       <div id="sub"></div>
       <div id="card" class="hide"><img id="cImg" alt=""><div style="flex:1;min-width:0"><div id="cName"></div><div id="cAct"></div><div id="cNote"></div></div>
@@ -115,6 +133,18 @@ const MODELS = window.FA_MODELS || 'https://cdn.jsdelivr.net/npm/@vladmandic/fac
    the same person is ignored 30 min after a punch; 5 s to undo; shifts are 12 h. */
 const R = { inBefore: 60, inAfter: 240, outBefore: 30, outAfter: 360, cool: 30, undo: 5, shiftH: 12 };
 const MATCH = 0.5, CLOSE = 0.17, LIVE = !window.KIOSK_NOLIVE;   // distance limit, face width ÷ picture width, blink check
+/* the outline (400 × 300 box, same shape as the picture): head centre 200,120, head 116 wide */
+const SIL = 'M60 300 C60 245 115 218 168 208 L174 186 A58 74 0 1 1 226 186 L232 208 C285 218 340 245 340 300 Z';
+const FITMSG = { far: ['Come closer', 'Fill the outline with your head and shoulders'], near: ['Step back a little', 'Your head should fit inside the outline'], side: ['Stand inside the outline', 'Move to the middle'] };
+/** Where the face sits in the outline box ('' = good enough; it does not need to be perfect). */
+function fit(box){
+  const v = document.getElementById('v'), c = document.getElementById('cam'), cw = c.clientWidth, ch = c.clientHeight;
+  const s = Math.max(cw / v.videoWidth, ch / v.videoHeight), ox = (cw - v.videoWidth * s) / 2, oy = (ch - v.videoHeight * s) / 2;
+  const x = cw - (box.x * s + ox) - box.width * s, y = box.y * s + oy;   // the picture is shown mirrored
+  const w = box.width * s * 400 / cw, cx = (x + box.width * s / 2) * 400 / cw, cy = (y + box.height * s / 2) * 300 / ch;
+  if (w < 62) return 'far'; if (w > 170) return 'near'; if (Math.abs(cx - 200) > 50 || cy < 72 || cy > 180) return 'side'; return '';
+}
+function silSet(c){ document.getElementById('sil').setAttribute('class', c); }
 const $ = id => document.getElementById(id), show = id => $(id).classList.remove('hide'), hide = id => $(id).classList.add('hide');
 const ls = { get: (k, d) => { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } }, set: (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} } };
 const DEV = (() => { try { let d = localStorage.getItem('wmDev'); if (!d) { d = Math.random().toString(36).slice(2) + Date.now().toString(36); localStorage.setItem('wmDev', d); } return d; } catch (e) { return 'kiosk'; } })();
@@ -223,11 +253,12 @@ async function tick(){
   const v = $('v'); if (!v.videoWidth) return;
   const all = await faceapi.detectAllFaces(v, new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.5 })).withFaceLandmarks().withFaceDescriptors();
   const t = now();
-  if (!all.length) { if (++NOFACE > 8) { document.body.classList.remove('lit'); $('ring').className = ''; HIST = []; EYES = []; } return; }
+  if (!all.length) { if (++NOFACE > 8) { document.body.classList.remove('lit'); $('ring').className = ''; silSet(''); HIST = []; EYES = []; } return; }
   NOFACE = 0; document.body.classList.add('lit');
-  const f = all.sort((a, b) => b.detection.box.width - a.detection.box.width)[0], box = f.detection.box;
+  const f = all.find(x => !fit(x.detection.box)) || all.sort((a, b) => b.detection.box.width - a.detection.box.width)[0], box = f.detection.box;   // the face in the outline wins over a bigger one passing by
   if (ENROL) return enrolTake(f, box);
-  if (box.width / v.videoWidth < CLOSE) { $('ring').className = 'wait'; if (!PEND) say('Come closer', 'Stand in front of the camera', '', true); return; }
+  const why = fit(box); silSet(why ? 'bad' : 'ok');   // only a face standing in the outline counts – someone walking past does nothing
+  if (why) { $('ring').className = 'wait'; if (!PEND) say(FITMSG[why][0], FITMSG[why][1], '', true); HIST = []; EYES = []; return; }
   if (!MATCHER) { $('ring').className = 'bad'; say('No faces enrolled yet', 'Admin: ⚙ → Enrol'); return; }
   const m = MATCHER.findBestMatch(f.descriptor), name = m.label === 'unknown' ? '' : m.label;
   const lm = f.landmarks.positions; EYES.push({ t: t, e: (ear(lm.slice(36, 42)) + ear(lm.slice(42, 48))) / 2 }); EYES = EYES.filter(x => t - x.t < 6000);
@@ -251,7 +282,7 @@ function earlyGo(r){ hide('early'); EARLY = { reason: r, until: now() + 30000 };
 
 /* ---- admin on the kiosk ---- */
 function admAsk(){ show('adm'); $('aPin').value = ''; $('aErr').textContent = ''; show('admLogin'); hide('admBody'); ADMPIN = ''; setTimeout(() => $('aPin').focus(), 50); }
-function admClose(){ ADMPIN = ''; ENROL = null; hide('adm'); }
+function admClose(){ ADMPIN = ''; ENROL = null; hide('eg'); hide('adm'); }
 async function admOpen(){
   const pin = $('aPin').value.trim(); if (!pin) return;
   try { await call('kioskForget', ['T:' + TOK, pin, '']); ADMPIN = pin; hide('admLogin'); show('admBody'); admDraw(); netShow(); }   // checks the PIN (removes nobody)
@@ -264,15 +295,38 @@ function admDraw(){
     '<td style="text-align:right"><button class="pri" onclick="enrolStart(\'' + w.name.replace(/'/g, "\\'") + '\')">' + (f[w.name] ? 'Enrol again' : 'Enrol') + '</button>' +
     (f[w.name] ? ' <button class="grey" onclick="forget(\'' + w.name.replace(/'/g, "\\'") + '\')">Remove</button>' : '') + '</td></tr>').join('');
 }
-function enrolStart(name){ ENROL = { name: name, descs: [], last: 0, photo: '' }; hide('adm'); hide('card'); say('Enrol: ' + name, 'Stand close, look at the camera, turn your head a little left and right', '', true); }
+const STEPS = [['front', 'Look straight'], ['left', 'Turn your head a little to one side'], ['right', 'Now a little to the other side'], ['up', 'Lift your chin a little'], ['down', 'Lower your chin a little']];
+function enrolStart(name){ ENROL = { name: name, descs: [], last: 0, t0: Date.now(), photo: '', p0: 0, sgn: 0, psgn: 0 }; hide('adm'); hide('card'); show('eg'); egDraw(); say('Enrol: ' + name, 'Stand inside the outline and follow the picture', '', true); }
+function egDraw(){
+  const n = ENROL ? ENROL.descs.length : 0, st = STEPS[Math.min(n, 4)];
+  $('egT').textContent = st[1]; $('egS').textContent = 'Step ' + (n + 1) + ' of 5 – a small move is enough';
+  $('egD').innerHTML = STEPS.map((x, i) => '<i class="' + (i < n ? 'done' : i === n ? 'now' : '') + '"></i>').join('');
+  $('egFace').style.animation = 'e' + st[0] + ' 2.2s ease-in-out infinite';
+}
+/** Head turn from the landmarks: nose against the middle of the eyes, measured in eye distances. */
+function pose(lm){
+  const P = lm.positions, eye = i => { let x = 0, y = 0; for (let k = i; k < i + 6; k++) { x += P[k].x; y += P[k].y; } return { x: x / 6, y: y / 6 }; };
+  const a = eye(36), b = eye(42), mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2, d = Math.hypot(a.x - b.x, a.y - b.y) || 1;
+  return { yaw: (P[30].x - mx) / d, pitch: (P[30].y - my) / d };
+}
 async function enrolTake(f, box){
-  const v = $('v'), t = Date.now();
-  if (box.width / v.videoWidth < CLOSE) { $('ring').className = 'wait'; say('Enrol: ' + ENROL.name + ' – come closer', 'Stand in front of the camera', '', true); return; }
-  if (t - ENROL.last < 450) return;
-  ENROL.last = t; ENROL.descs.push(Array.from(f.descriptor)); if (!ENROL.photo) ENROL.photo = snap(box);
-  $('ring').className = 'ok'; say('Enrol: ' + ENROL.name + ' – ' + ENROL.descs.length + ' / 5', 'Turn your head a little', '', true);
+  const E = ENROL, t = Date.now(), why = fit(box); silSet(why ? 'bad' : 'ok');
+  if (why) { $('ring').className = 'wait'; say('Enrol: ' + E.name + ' – ' + FITMSG[why][0], FITMSG[why][1], '', true); return; }
+  if (t - E.last < 400) return;
+  if (E.descs.length && faceapi.euclideanDistance(E.descs[0], Array.from(f.descriptor)) > 0.6) { $('ring').className = 'bad'; say('Only ' + E.name + ' in front of the camera', 'Another face was seen', '', true); return; }
+  const st = STEPS[E.descs.length][0], p = pose(f.landmarks), late = t - E.t0 > 10000, dy = p.pitch - E.p0;   // after 10 s the step is taken anyway
+  let good;
+  if (st === 'front') good = Math.abs(p.yaw) < 0.1;
+  else if (st === 'left') { good = Math.abs(p.yaw) > 0.13; if (good) E.sgn = Math.sign(p.yaw); }
+  else if (st === 'right') good = E.sgn ? p.yaw * E.sgn < -0.13 : Math.abs(p.yaw) > 0.13;
+  else if (st === 'up') { good = Math.abs(dy) > 0.07; if (good) E.psgn = Math.sign(dy); }
+  else good = E.psgn ? dy * E.psgn < -0.07 : Math.abs(dy) > 0.07;
+  if (!good && !late) { $('ring').className = 'wait'; say('Enrol: ' + E.name, 'Follow the picture', '', true); return; }
+  E.last = t; E.t0 = t; if (st === 'front') { E.p0 = p.pitch; E.photo = snap(box); }
+  E.descs.push(Array.from(f.descriptor)); if (E.descs.length < 5) egDraw();
+  $('ring').className = 'ok'; say('Enrol: ' + E.name + ' – ' + E.descs.length + ' / 5', '', '', true);
   if (ENROL.descs.length >= 5) {
-    const e = ENROL; ENROL = null; say('Saving ' + e.name + '…', '', '', true);
+    const e = ENROL; ENROL = null; hide('eg'); say('Saving ' + e.name + '…', '', '', true);
     try { const d = await call('kioskEnroll', ['T:' + TOK, ADMPIN, e.name, e.descs, e.photo]); ls.set('wmKioskData', d); useData(d); say('✅ ' + e.name + ' enrolled', 'He can now check in with his face'); speak(e.name + ' enrolled'); }
     catch (er) { say('Not saved', er.message); }
     show('adm');
@@ -286,6 +340,8 @@ async function setupGo(){
   try { const r = await call('kioskStart', [$('sPin').value.trim()]); TOK = r.tok; ls.set('wmKioskTok', TOK); location.reload(); } catch (e) { $('sErr').textContent = e.message; }
 }
 async function start(){
+  const vm = 'url("data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300" preserveAspectRatio="none"><path fill-rule="evenodd" d="M0 0H400V300H0Z ' + SIL + '"/></svg>') + '")';
+  $('veil').style.maskImage = $('veil').style.webkitMaskImage = vm; $('sil').firstChild.setAttribute('d', SIL);
   if (!TOK) { show('setup'); return; }
   show('main'); say('Loading face models…', 'First start needs internet', '', true);
   try { await faceapi.nets.tinyFaceDetector.loadFromUri(MODELS); await faceapi.nets.faceLandmark68Net.loadFromUri(MODELS); await faceapi.nets.faceRecognitionNet.loadFromUri(MODELS); }

@@ -25,18 +25,19 @@
   #veil{position:absolute;inset:0;pointer-events:none;backdrop-filter:blur(8px) brightness(.5);-webkit-backdrop-filter:blur(8px) brightness(.5);mask-size:100% 100%;-webkit-mask-size:100% 100%}
   #sil{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
   #sil path{fill:none;stroke:#fff;stroke-width:3;stroke-dasharray:10 7;transition:stroke .2s}
-  #sil.ok path{stroke:#4ade80;stroke-dasharray:none;stroke-width:4} #sil.bad path{stroke:#fbbf24}
+  #sil.in path{stroke-dasharray:none} #sil.ok path{stroke:#4ade80;stroke-dasharray:none;stroke-width:4} #sil.bad path{stroke:#fbbf24} #sil.no path{stroke:#f87171;stroke-dasharray:none;stroke-width:4}
+  /* white = stand in the outline · solid white = in place, checking · green = recognised · red = not recognised */
   /* enrolment guide: a small head shows the move to make */
   #eg{display:flex;gap:18px;align-items:center;background:#0f172a;color:#fff;border-radius:18px;padding:14px}
   #eg svg{width:120px;height:120px;flex:none}
   #egT{font-size:28px;font-weight:700} .dots{display:flex;gap:8px;margin-top:10px} .dots i{width:22px;height:22px;border-radius:50%;background:#334155;display:block}
   .dots i.done{background:#16a34a} .dots i.now{background:#f59e0b}
-  @keyframes efront{0%,100%{transform:scale(1)}50%{transform:scale(1.06)}}
-  @keyframes eleft{0%,20%,100%{transform:translateX(0)}45%,75%{transform:translateX(-16px)}}
-  @keyframes eright{0%,20%,100%{transform:translateX(0)}45%,75%{transform:translateX(16px)}}
-  @keyframes eup{0%,20%,100%{transform:translateY(0)}45%,75%{transform:translateY(-12px)}}
-  @keyframes edown{0%,20%,100%{transform:translateY(0)}45%,75%{transform:translateY(12px)}}
-  #egFace{transform-box:view-box}
+  @keyframes efront{0%,100%{transform:none}50%{transform:scale(1.05)}}
+  @keyframes eleft{0%,20%,100%{transform:none}45%,75%{transform:perspective(260px) rotateY(-32deg)}}
+  @keyframes eright{0%,20%,100%{transform:none}45%,75%{transform:perspective(260px) rotateY(32deg)}}
+  @keyframes eup{0%,20%,100%{transform:none}45%,75%{transform:perspective(260px) rotateX(28deg)}}
+  @keyframes edown{0%,20%,100%{transform:none}45%,75%{transform:perspective(260px) rotateX(-28deg)}}
+  #egH{transform-origin:50% 50%} #egA{font-size:40px;font-weight:800;color:#f59e0b;width:44px;text-align:center}
   #side{display:flex;flex-direction:column;justify-content:center;gap:18px;min-width:0}
   #msg{font-size:44px;font-weight:700;line-height:1.15}
   #sub{font-size:24px;color:var(--muted)} body.lit #sub{color:#475569}
@@ -90,7 +91,7 @@
   <div id="stage">
     <div id="cam"><video id="v" autoplay muted playsinline></video><div id="ring"></div><div id="veil"></div><svg id="sil" viewBox="0 0 400 300" preserveAspectRatio="none"><path/></svg></div>
     <div id="side">
-      <div id="eg" class="hide"><svg viewBox="0 0 120 120"><ellipse cx="60" cy="62" rx="40" ry="50" fill="#b07a55"/><g id="egFace"><circle cx="46" cy="56" r="5" fill="#111"/><circle cx="74" cy="56" r="5" fill="#111"/><path d="M60 60 L55 76 H64" fill="none" stroke="#5b3a24" stroke-width="3"/><path d="M48 88 Q60 96 72 88" fill="none" stroke="#5b3a24" stroke-width="3"/></g></svg>
+      <div id="eg" class="hide"><span id="egA"></span><svg id="egH" viewBox="0 0 120 120"><ellipse cx="60" cy="62" rx="40" ry="50" fill="#b07a55"/><path d="M21 52 Q24 10 60 12 Q96 10 99 52 Q88 30 60 28 Q32 30 21 52Z" fill="#1f2937"/><circle cx="46" cy="58" r="5" fill="#111"/><circle cx="74" cy="58" r="5" fill="#111"/><path d="M60 60 L54 78 H64" fill="none" stroke="#5b3a24" stroke-width="3"/><path d="M47 90 Q60 98 73 90" fill="none" stroke="#5b3a24" stroke-width="3"/></svg>
         <div><div id="egT"></div><div class="hint" id="egS" style="font-size:18px"></div><div class="dots" id="egD"></div></div></div>
       <div id="msg">Starting…</div>
       <div id="sub"></div>
@@ -117,7 +118,8 @@
   <h1 id="revT"></h1>
   <p class="hint big">Check every picture: face clear, no hand or phone in front of it, only this person. Not good? Press Redo.</p>
   <div id="revI" class="row" style="gap:12px"></div>
-  <div class="row" style="margin-top:18px"><button class="pri big" onclick="revSave()">✓ Save</button><button class="grey big" onclick="revRedo()">↺ Redo</button><button class="grey big" onclick="revCancel()">Cancel</button></div>
+  <p id="revW" style="color:#f87171;font-size:20px"></p>
+  <div class="row" style="margin-top:18px"><button id="revS" class="pri big" onclick="revSave()">✓ Save</button><button class="grey big" onclick="revRedo()">↺ Redo</button><button class="grey big" onclick="revCancel()">Cancel</button></div>
 </div></div>
 
 <div id="adm" class="pane hide"><div class="box">
@@ -265,15 +267,16 @@ async function tick(){
   NOFACE = 0; document.body.classList.add('lit');
   const f = all.find(x => !fit(x.detection.box)) || all.sort((a, b) => b.detection.box.width - a.detection.box.width)[0], box = f.detection.box;   // the face in the outline wins over a bigger one passing by
   if (ENROL) return ENROL.review ? undefined : enrolTake(f, box);
-  const why = fit(box); silSet(why ? 'bad' : 'ok');   // only a face standing in the outline counts – someone walking past does nothing
+  const why = fit(box); silSet(why ? 'bad' : 'in');   // only a face standing in the outline counts – someone walking past does nothing
   if (why) { $('ring').className = 'wait'; if (!PEND) say(FITMSG[why][0], FITMSG[why][1], '', true); HIST = []; EYES = []; return; }
   if (!MATCHER) { $('ring').className = 'bad'; say('No faces enrolled yet', 'Admin: ⚙ → Enrol'); return; }
-  const m = MATCHER.findBestMatch(f.descriptor), name = m.label === 'unknown' ? '' : m.label;
+  const m = best(f.descriptor), name = m.name;
   const lm = f.landmarks.positions; EYES.push({ t: t, e: (ear(lm.slice(36, 42)) + ear(lm.slice(42, 48))) / 2 }); EYES = EYES.filter(x => t - x.t < 6000);
   HIST.push({ t: t, n: name, d: m.distance }); HIST = HIST.filter(x => t - x.t < 6000);
   if (PEND) return;
   const same = HIST.length >= 2 && HIST.slice(-2).every(x => x.n === HIST[HIST.length - 1].n);   // 2 matching looks in a row (slow laptops too)
   if (!same) { $('ring').className = 'wait'; return; }
+  silSet(name ? 'ok' : 'no');
   if (!name) { $('ring').className = 'bad'; say('Not recognised', 'Look straight at the camera – or ask your supervisor', '', true); return; }
   if (IGN[name] && t < IGN[name]) return;
   const blinked = !LIVE || (EYES.some(x => x.e > 0.26) && EYES.some(x => x.e < 0.21));
@@ -281,6 +284,18 @@ async function tick(){
   if (!dec.kind) { $('ring').className = 'ok'; cardShow('info', name, dec.msg, dec.note, '', false); show('card'); IGN[name] = t + 6000; setTimeout(() => { if (!PEND) hide('card'); }, 5000); return; }
   if (!blinked) { $('ring').className = 'wait'; say('Blink your eyes, ' + name, 'So the camera knows you are really here', '', true); return; }
   $('ring').className = 'ok'; show('card'); punch(name, dec, box, m.distance); HIST = []; EYES = [];
+}
+/** Strict match for punching: close to one person's prints (0.45) AND clearly closer than to anybody else,
+ *  so a half-covered face is not taken for the wrong worker. */
+const STRICT = 0.45, MARGIN = 0.06;
+function best(d, skip){
+  let b = { name: '', distance: 9 }, s2 = 9;
+  (MATCHER ? MATCHER.labeledDescriptors : []).forEach(L => { if (L.label === skip) return;
+    const dd = Math.min.apply(null, L.descriptors.map(x => faceapi.euclideanDistance(x, d)));
+    if (dd < b.distance) { s2 = b.distance; b = { name: L.label, distance: dd }; } else if (dd < s2) s2 = dd; });
+  if (skip) return b;
+  if (b.distance > STRICT || s2 - b.distance < MARGIN) b.name = '';
+  return b;
 }
 async function loop(){ if (!BUSY) { BUSY = true; try { await tick(); } catch (e) { console.log(e); } BUSY = false; } setTimeout(loop, 80); }
 
@@ -303,13 +318,13 @@ function admDraw(){
     '<td style="text-align:right"><button class="pri" onclick="enrolStart(\'' + w.name.replace(/'/g, "\\'") + '\')">' + (f[w.name] ? 'Enrol again' : 'Enrol') + '</button>' +
     (f[w.name] ? ' <button class="grey" onclick="forget(\'' + w.name.replace(/'/g, "\\'") + '\')">Remove</button>' : '') + '</td></tr>').join('');
 }
-const STEPS = [['front', 'Look straight'], ['left', 'Turn your head a little to one side'], ['right', 'Now a little to the other side'], ['up', 'Lift your chin a little'], ['down', 'Lower your chin a little']];
+const STEPS = [['front', 'Look straight', ''], ['left', 'Turn your head a little to your left', '◀'], ['right', 'Now a little to your right', '▶'], ['up', 'Look up a little', '▲'], ['down', 'Look down a little', '▼']];
 function enrolStart(name){ ENROL = { name: name, descs: [], shots: [], last: 0, t0: Date.now(), p0: 0, sgn: 0, psgn: 0 }; hide('adm'); hide('card'); show('eg'); egDraw(); say('Enrol: ' + name, 'Stand inside the outline and follow the picture', '', true); }
 function egDraw(){
   const n = ENROL ? ENROL.descs.length : 0, st = STEPS[Math.min(n, 4)];
   $('egT').textContent = st[1]; $('egS').textContent = 'Step ' + (n + 1) + ' of 5 – a small move is enough';
   $('egD').innerHTML = STEPS.map((x, i) => '<i class="' + (i < n ? 'done' : i === n ? 'now' : '') + '"></i>').join('');
-  $('egFace').style.animation = 'e' + st[0] + ' 2.2s ease-in-out infinite';
+  $('egH').style.animation = 'e' + st[0] + ' 2.2s ease-in-out infinite'; $('egA').textContent = st[2];   // shown like a mirror: the worker copies what he sees
 }
 /** Head turn from the landmarks: nose against the middle of the eyes, measured in eye distances. */
 function pose(lm){
@@ -318,7 +333,7 @@ function pose(lm){
   return { yaw: (P[30].x - mx) / d, pitch: (P[30].y - my) / d };
 }
 async function enrolTake(f, box){
-  const E = ENROL, t = Date.now(), why = fit(box); silSet(why ? 'bad' : 'ok');
+  const E = ENROL, t = Date.now(), why = fit(box); silSet(why ? 'bad' : 'in');
   if (why) { $('ring').className = 'wait'; say('Enrol: ' + E.name + ' – ' + FITMSG[why][0], FITMSG[why][1], '', true); return; }
   if (t - E.last < 400) return;
   if (f.detection.score < (t - E.t0 > 10000 ? 0.65 : 0.8)) { $('ring').className = 'wait'; say('Enrol: ' + E.name + ' – keep your face clear', 'Hands down, nothing in front of the face', '', true); return; }
@@ -332,13 +347,17 @@ async function enrolTake(f, box){
   else good = E.psgn ? dy * E.psgn < -0.07 : Math.abs(dy) > 0.07;
   if (!good && !late) { $('ring').className = 'wait'; say('Enrol: ' + E.name, 'Follow the picture', '', true); return; }
   E.last = t; E.t0 = t; if (st === 'front') E.p0 = p.pitch;
-  E.descs.push(Array.from(f.descriptor)); E.shots.push(snap(box)); if (E.descs.length < 5) egDraw();
+  E.descs.push(Array.from(f.descriptor)); E.shots.push(snap(box)); silSet('ok'); if (E.descs.length < 5) egDraw();
   $('ring').className = 'ok'; say('Enrol: ' + E.name + ' – ' + E.descs.length + ' / 5', '', '', true);
   if (E.descs.length >= 5) { E.review = true; hide('eg'); silSet(''); revShow(); }
 }
 const SHOT_NM = ['Straight', 'Side', 'Other side', 'Chin up', 'Chin down'];
 function revShow(){
   $('revT').textContent = ENROL.name + ' – check the pictures';
+  let dup = null; ENROL.descs.forEach(d => { const b = best(d, ENROL.name); if (b.name && b.distance < 0.5 && (!dup || b.distance < dup.distance)) dup = b; });
+  ENROL.dup = dup;
+  $('revW').innerHTML = dup ? '⛔ This face is already enrolled as <b>' + dup.name + '</b>. One face can belong to one worker only – remove it from ' + dup.name + ' first, or enrol the right person.' : '';
+  $('revS').disabled = !!dup; $('revS').style.opacity = dup ? .4 : 1;
   $('revI').innerHTML = ENROL.shots.map((u, i) => '<div style="text-align:center"><img src="' + u + '" style="width:140px;height:140px;border-radius:12px;transform:scaleX(-1)"><div class="hint">' + SHOT_NM[i] + '</div></div>').join('');
   show('rev');
 }
@@ -348,6 +367,7 @@ function strip(shots){
     shots.forEach((u, i) => { const im = new Image(); im.onload = () => { g.save(); g.translate(180 * i + 180, 0); g.scale(-1, 1); g.drawImage(im, 0, 0, 180, 180); g.restore(); if (++n === shots.length) ok(c.toDataURL('image/jpeg', 0.75)); }; im.src = u; }); });
 }
 async function revSave(){
+  if (ENROL.dup) return;
   const e = ENROL; ENROL = null; hide('rev'); say('Saving ' + e.name + '…', '', '', true);
   try { const d = await call('kioskEnroll', ['T:' + TOK, ADMPIN, e.name, e.descs, await strip(e.shots)]); ls.set('wmKioskData', d); useData(d); say('✅ ' + e.name + ' enrolled', 'He can now check in with his face'); speak(e.name + ' enrolled'); }
   catch (er) { say('Not saved', er.message); }

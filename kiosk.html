@@ -37,6 +37,26 @@
   .hint{color:var(--muted);font-size:16px}
   .big{font-size:22px}
   #reasons button{flex:1 1 40%;font-size:22px;padding:20px}
+  /* phone or tablet standing upright: camera on top, name card below */
+  @media (orientation: portrait){
+    #main{padding:10px 12px}
+    #top{font-size:17px;gap:10px} #top img{height:32px} #clock{font-size:30px}
+    #stage{grid-template-columns:1fr;grid-template-rows:auto auto;align-content:start;gap:14px}
+    #cam{width:min(100%,62vh)}
+    #side{justify-content:flex-start;gap:12px;text-align:center}
+    #msg{font-size:34px} #sub{font-size:20px}
+    #card{flex-wrap:wrap;justify-content:center;text-align:left;padding:14px}
+    #card img{width:96px;height:96px}
+    #cName{font-size:30px} #cAct{font-size:23px} #cNote{font-size:17px}
+    #undo{flex:1 1 100%}
+    #bottom .early{font-size:19px;padding:14px 18px}
+  }
+  /* small screens lying sideways (a phone): smaller text so it fits */
+  @media (orientation: landscape) and (max-height:500px){
+    #main{padding:6px 10px;gap:4px} #top{font-size:16px} #top img{height:28px} #clock{font-size:26px}
+    #msg{font-size:28px} #sub{font-size:17px} #card{padding:10px;gap:10px} #card img{width:80px;height:80px}
+    #cName{font-size:24px} #cAct{font-size:19px} #cNote{font-size:15px} #bottom .early{font-size:16px;padding:10px 14px}
+  }
 </style></head><body>
 
 <!-- first time: this laptop becomes the gate kiosk -->

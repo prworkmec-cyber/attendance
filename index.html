@@ -697,7 +697,12 @@ function hrList(r){
   $('hrT').textContent = 'Payroll – ' + r.label;
   const rows = bySh(r.rows.map(x => Object.assign({ active: true }, x)));
   let g = '';
-  $('hrL').innerHTML = '<table class="hrt" style="width:100%"><tr><th>Worker</th><th class="r">Days</th><th class="r">OT h</th><th class="r">Gross</th></tr>' +
+  window._hrIx = r.ix || []; window._hrM = r.month;
+  const ixc = (a, b, l) => a === b ? '' : ' · ' + l + ' ' + a + ' → <b>' + b + '</b>';
+  $('hrL').innerHTML = (r.ix && r.ix.length ? '<div class="card" style="background:#FFF8E1;border:1px solid #F59E0B"><b>📋 Salary Index changed – confirm</b><div class="hint">Someone typed a new salary in the Salary Index. Pay changes only after you confirm.</div>' +
+      r.ix.map((d, i) => '<div class="it" style="padding:6px 0;border-top:1px solid var(--line)"><b>' + esc(d.name) + '</b>' + ixc(d.from.basic, d.to.basic, 'basic') + ixc(d.from.food, d.to.food, 'food') + ixc(d.from.other, d.to.other, 'other') +
+        '<div class="row" style="margin-top:4px"><button class="in sm" onclick="hrIxYes(' + i + ')">✓ Apply</button><button class="grey sm" onclick="hrIxNo(' + i + ')">Ignore</button></div></div>').join('') + '</div>' : '') +
+    '<table class="hrt" style="width:100%"><tr><th>Worker</th><th class="r">Days</th><th class="r">OT h</th><th class="r">Gross</th></tr>' +
     rows.map(x => (x.shift !== g ? (g = x.shift, '<tr><td colspan="4" style="font-weight:bold;color:var(--blue);padding-top:12px">' + esc(x.shift) + ' SHIFT</td></tr>') : '') +
       '<tr class="w" onclick="hrOpen(\'' + esc(x.name).replace(/'/g, "\\'") + '\')"><td>' + av(x.name) + esc(x.name) + (x.ded ? ' <span class="hint">−' + x.ded + '</span>' : '') + (x.bonus ? ' <span class="hint" style="color:#2E7D32">+' + x.bonus + '</span>' : '') + '</td><td class="r">' + x.days + '</td><td class="r">' + x.ot + '</td><td class="r"><b>' + hrAed(x.gross) + '</b></td></tr>').join('') +
     '<tr><td colspan="3"><b>Total (' + r.rows.length + ' workers)</b></td><td class="r"><b>' + hrAed(r.total) + '</b></td></tr>' +
@@ -707,6 +712,17 @@ function hrList(r){
     (r.closeOn ? '<div class="card" style="margin-top:12px;background:#F8FAFC"><b>📅 Month close</b>' +
       '<div class="hint">' + esc(r.label) + ' closes by itself on ' + esc(r.closeOn) + ' at 07:00: the month is locked, requests still waiting become unpaid, a "' + esc(r.label) + '" tab is added to the Salary Statement, and the statement PDF + all payslips (Excel) are saved in Drive and emailed to ' + esc((r.mailTo || []).join(', ')) + '. Then the payslips move to the next month.' + (r.closed ? ' Last closed: ' + esc(r.closed) + '.' : '') + '</div>' +
       '<div class="row"><button class="grey sm" onclick="hrPre()">Check before closing</button>' + (r.over ? '<button class="out sm" onclick="hrCloseNow(\'' + esc(r.label) + '\')">Close ' + esc(r.label) + ' now</button>' : '') + '</div></div>' : '');
+}
+function hrIxYes(i){
+  const d = window._hrIx[i];
+  ask({ title: 'Apply salary – ' + d.name, yes: 'Apply', en: 'New monthly salary from the Salary Index: basic ' + d.to.basic + ' · food ' + d.to.food + ' · other ' + d.to.other + '.\nIt is recorded as a salary change (who, when, what it was before).',
+        html: '<label>Starts from month<br><input id="ixM" type="month" value="' + window._hrM + '" style="width:100%"></label>' },
+    () => call('hrIxApply', [PIN, d.name, $('ixM').value], r => { hrList(r); toast(d.name + ': salary applied', true); }));
+}
+function hrIxNo(i){
+  const d = window._hrIx[i];
+  ask({ title: 'Ignore – ' + d.name, yes: 'Ignore', en: 'Keep the payslip salary (basic ' + d.from.basic + ') and stop asking about this Salary Index entry. If the Index is changed again, you will be asked again.' },
+    () => call('hrIxIgnore', [PIN, d.name], hrList));
 }
 function hrPre(){ call('preCloseNow', [PIN], r => ask({ title: '📅 Before closing ' + monLbl(r.month), noYes: true, en: r.text })); }
 const monLbl = m => new Date(m + '-01T12:00:00').toLocaleString('en-GB', { month: 'long', year: 'numeric' });
@@ -730,11 +746,12 @@ function hrMgDraw(s){
       '<button class="pri sm" style="margin-top:8px" onclick="hrInc()">+ New salary / increment</button></div>';
   $('hrM').style.display = 'block'; $('hrM').scrollTop = 0;
 }
-function hrOpen(name){ call('hrSlip', [PIN, name], hrDraw); }
+function hrOpen(name){ window._hsEdit = false; call('hrSlip', [PIN, name], hrDraw); }
 function hrClose(){ $('hrM').style.display = 'none'; hrLoad(); }
 function hrDraw(s){
   window._hs = s;
   if (s.mg) return hrMgDraw(s);
+  if (window._hsEdit) return hrSalDraw(s);
   const first = new Date(s.month + '-01T12:00:00').getDay(), cells = [];
   for (let k = 0; k < first; k++) cells.push('<div></div>');
   s.days.forEach((d, i) => {
@@ -757,8 +774,35 @@ function hrDraw(s){
     '<div class="card"><b>Salary &amp; increments</b>' +
       (s.cur ? '<div>Now: basic ' + hrAed(s.cur.basic) + ' · food ' + hrAed(s.cur.food) + ' · other ' + hrAed(s.cur.other) + '</div>' : '<div class="hint">No increment recorded yet – the slip\'s own amounts are used.</div>') +
       (s.inc.length ? s.inc.map(x => '<div class="it">' + esc(x.m) + ': basic ' + x.basic + ' · food ' + x.food + ' · other ' + x.other + ' <span class="hint">' + esc(x.note) + '</span></div>').join('') : '') +
-      '<button class="pri sm" style="margin-top:8px" onclick="hrInc()">+ New salary / increment</button></div>';
+      '<button class="pri sm" style="margin-top:8px" onclick="hrSalEdit()">✏ Edit salary</button></div>';
   $('hrM').style.display = 'block'; $('hrM').scrollTop = 0;
+}
+/** ✏ Edit salary (Haroon 26 Nov): everything about one worker's pay in one place – salary now, its history (remove a
+ *  change while its month is open), bonus and deductions of this month. Every change is recorded and copied to the Salary Index. */
+function hrSalEdit(){ window._hsEdit = true; hrSalDraw(window._hs); }
+function hrSalBack(){ window._hsEdit = false; hrDraw(window._hs); }
+function hrSalDraw(s){
+  const line = (a, b) => '<tr><td>' + a + '</td><td style="text-align:right">' + b + '</td></tr>';
+  $('hrB').innerHTML =
+    '<div class="row" style="margin-bottom:6px"><button class="grey sm" onclick="hrSalBack()">← Payslip</button><b style="flex:1;font-size:17px">✏ ' + av(s.name) + esc(s.name) + '</b><span class="hint">' + esc(s.label) + '</span></div>' +
+    '<div class="card"><b>Monthly salary now</b><table class="mt" style="width:100%;margin-top:4px">' + line('Basic', hrAed(s.basic)) + line('Food allowance', hrAed(s.foodM)) + line('Other allowance', hrAed(s.otherM)) +
+      '<tr><td><b>Total</b></td><td style="text-align:right"><b>' + hrAed((Number(s.basic) || 0) + (Number(s.foodM) || 0) + (Number(s.otherM) || 0)) + '</b></td></tr></table>' +
+      '<button class="pri" style="width:100%;margin-top:8px" onclick="hrInc()">✏ Change salary / increment</button>' +
+      '<div class="hint" style="margin-top:4px">Pick the month it starts. The Salary Index (salary row and increment table) is updated by the app.</div></div>' +
+    '<div class="card"><b>Salary history</b>' + (s.inc.length ? s.inc.map(x => '<div class="it" style="padding:6px 0;border-top:1px solid var(--line)"><b>' + esc(monLbl(x.m)) + '</b>: basic ' + x.basic + ' · food ' + x.food + ' · other ' + x.other +
+        '<div class="hint">' + esc(x.note) + '</div>' + (x.row ? '<button class="grey xs" style="margin-top:2px" onclick="hrIncDel(' + x.row + ')">🗑 Remove</button>' : '') + '</div>').join('') :
+      '<div class="hint">No salary change recorded yet – the payslip amounts are used.</div>') + '</div>' +
+    '<div class="card"><b>Bonus &amp; deductions – ' + esc(s.label) + '</b>' +
+      (s.adj.length ? s.adj.map(a => '<div class="it" style="padding:4px 0">' + (a.type === 'Bonus' ? '➕ ' : '➖ ') + hrAed(a.amt) + ' – ' + esc(a.note) + ' <span class="hint">(' + esc(a.by) + ')</span> <button class="grey xs" onclick="hrAdjDel(\'' + a.id + '\')">🗑</button></div>').join('') : '<div class="hint">None this month.</div>') +
+      (s.dedNote ? '<div class="hint" style="white-space:pre-wrap;margin-top:4px">' + esc(s.dedNote) + '</div>' : '') +
+      '<div class="row" style="margin-top:8px"><button class="in sm" onclick="hrAdj(\'Bonus\')">+ Bonus / benefit</button><button class="out sm" onclick="hrAdj(\'Deduction\')">+ Deduction</button></div>' +
+      '<div class="hint" style="margin-top:4px">Bonus → Master Sheet "Other allowance" column; deduction → "Deduction" column, this month only.</div></div>';
+  $('hrM').style.display = 'block'; $('hrM').scrollTop = 0;
+}
+function hrIncDel(row){
+  const s = window._hs, x = s.inc.find(z => z.row === row);
+  ask({ title: 'Remove salary change', warn: true, names: [s.name], yes: 'Remove', en: monLbl(x.m) + ': basic ' + x.basic + ' · food ' + x.food + ' · other ' + x.other + '\nIf no other change applies, the payslip goes back to the salary before it. The removal is recorded.' },
+    () => call('hrIncDel', [PIN, s.name, row], v => { hrDraw(v); toast('Removed', true); }));
 }
 /** HR → payslip → tap a day (Haroon 22 Nov): who marked it, the leave, its documents, paid / unpaid – then change the day if needed. */
 function hrDay(i){
